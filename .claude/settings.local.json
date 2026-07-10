@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Remove-Item \"O:\\\\Unity\\\\Projects\\\\ElementalArena\\\\Assets\\\\Scripts\\\\GameUI.cs\" -Confirm:$false)"
+    ]
+  }
+}

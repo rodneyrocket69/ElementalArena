@@ -1,0 +1,262 @@
+using System.Collections;
+using UnityEngine;
+
+public class AIController : MonoBehaviour
+{
+    public BoardManager boardManager;
+    public TurnManager  turnManager;
+
+    [Tooltip("Seconds before AI acts (for feel)")]
+    public float thinkDelay = 0.9f;
+
+    [Tooltip("Seconds between the AI's two actions")]
+    public float actionDelay = 0.6f;
+
+    BoardVisual boardVisual; // found automatically so no scene wiring is needed
+
+    void Start() => boardVisual = FindObjectOfType<BoardVisual>();
+
+    public void BeginAITurn() => StartCoroutine(RunAITurn());
+
+    // One candidate action (move, attack, or ability cast) with a score.
+    // Every turn the AI scores every option across ALL its pieces and plays the best one.
+    class AIAction
+    {
+        public enum Kind { Move, Attack, Ability }
+        public Kind  kind;
+        public int   r, c;    // acting piece
+        public int   tr, tc;  // target cell
+        public float score;
+    }
+
+    IEnumerator RunAITurn()
+    {
+        yield return new WaitForSeconds(thinkDelay);
+
+        for (int ap = 0; ap < 2; ap++)
+        {
+            if (boardManager.CheckWinner() != 0) break;
+
+            var action = FindBestAction();
+            if (action == null) { Log("[AI] Nothing useful to do."); break; }
+
+            Execute(action);
+            if (boardVisual != null) boardVisual.RefreshAll(); // show each action as it happens
+            yield return new WaitForSeconds(actionDelay);
+        }
+
+        turnManager.EndAITurn();
+    }
+
+    void Execute(AIAction a)
+    {
+        switch (a.kind)
+        {
+            case AIAction.Kind.Move:    boardManager.TryMove(a.r, a.c, a.tr, a.tc);    break;
+            case AIAction.Kind.Attack:  boardManager.TryAttack(a.r, a.c, a.tr, a.tc);  break;
+            case AIAction.Kind.Ability: boardManager.TryAbility(a.r, a.c, a.tr, a.tc); break;
+        }
+    }
+
+    // ── scoring ──────────────────────────────────────────────────────────────
+
+    AIAction FindBestAction()
+    {
+        var board = boardManager.Board;
+        AIAction best = null;
+
+        for (int r = 0; r < BoardManager.BS; r++)
+        for (int c = 0; c < BoardManager.BS; c++)
+        {
+            var p = board[r, c];
+            if (p == null || p.player != 2 || p.isDecoy || p.stunned) continue;
+
+            ScoreAttacks(p, r, c, ref best);
+            ScoreAbility(p, r, c, ref best);
+            ScoreMoves(p, r, c, ref best);
+        }
+        return best;
+    }
+
+    void Consider(ref AIAction best, AIAction candidate)
+    {
+        if (candidate.score <= 0f) return;
+        if (best == null || candidate.score > best.score) best = candidate;
+    }
+
+    void ScoreAttacks(Piece p, int r, int c, ref AIAction best)
+    {
+        var board = boardManager.Board;
+        foreach (var (tr, tc) in boardManager.GetAttacks(r, c))
+        {
+            var t = board[tr, tc];
+            if (t == null) continue;
+            Consider(ref best, new AIAction {
+                kind = AIAction.Kind.Attack, r = r, c = c, tr = tr, tc = tc,
+                score = HitValue(t, isPhysical: true)
+            });
+        }
+    }
+
+    // How valuable is landing one hit on this target? 0 = pointless, skip it.
+    float HitValue(Piece t, bool isPhysical)
+    {
+        if (isPhysical && (t.key == "BULWARK" || t.key == "SHARDIS" || t.key == "FROSTBITE"))
+            return 0f;                                    // immune/absorbed — wasted action
+        if (t.isDecoy) return 2f;                         // pop the phantom
+        if (t.energyShieldActive || t.shielded) return 2f;// burns a shield, no damage yet
+        if (t.shards == 1) return 15f;                    // kill shot
+        return 8f - t.shards;                             // prefer wounded targets
+    }
+
+    void ScoreAbility(Piece p, int r, int c, ref AIAction best)
+    {
+        if (p.abilityCd > 0) return;
+        var board = boardManager.Board;
+
+        foreach (var (tr, tc) in boardManager.GetCastTargets(r, c))
+        {
+            float score = 0f;
+
+            switch (p.ability.type)
+            {
+                case AbilityType.Damage:
+                {
+                    var t = board[tr, tc];
+                    if (t != null) score = HitValue(t, isPhysical: false);
+                    break;
+                }
+                case AbilityType.Line:
+                {
+                    // Walk the line — only worth casting if the first piece hit is an enemy
+                    int dr = System.Math.Sign(tr - r), dc = System.Math.Sign(tc - c);
+                    int nr = r + dr, nc = c + dc;
+                    while (BoardManager.InBounds(nr, nc) && board[nr, nc] == null) { nr += dr; nc += dc; }
+                    if (BoardManager.InBounds(nr, nc))
+                    {
+                        var t = board[nr, nc];
+                        if (t != null && t.player == 1) score = HitValue(t, isPhysical: false);
+                    }
+                    break;
+                }
+                case AbilityType.Freeze:
+                {
+                    int caught = 0;
+                    for (int ddr = -1; ddr <= 1; ddr++) for (int ddc = -1; ddc <= 1; ddc++)
+                    {
+                        int nr = tr + ddr, nc = tc + ddc;
+                        if (!BoardManager.InBounds(nr, nc)) continue;
+                        var t = board[nr, nc];
+                        if (t != null && t.player == 1 && !t.isDecoy && !t.rooted && t.key != "ZEPHYROS")
+                            caught++;
+                    }
+                    score = caught * 4f;
+                    break;
+                }
+                case AbilityType.Shockwave:
+                {
+                    int radius = p.staticCharges > 0 ? p.staticCharges : 1;
+                    int caught = 0;
+                    for (int ddr = -radius; ddr <= radius; ddr++) for (int ddc = -radius; ddc <= radius; ddc++)
+                    {
+                        int nr = r + ddr, nc = c + ddc;
+                        if (!BoardManager.InBounds(nr, nc) || (ddr == 0 && ddc == 0)) continue;
+                        var t = board[nr, nc];
+                        if (t != null && t.player == 1 && !t.isDecoy && !t.stunned) caught++;
+                    }
+                    score = caught * 5f;
+                    break;
+                }
+                case AbilityType.Fortress:
+                    score = EnemyWithin(r, c, 3) ? 3f : 0f;
+                    break;
+
+                case AbilityType.Barrier:
+                {
+                    var t = board[tr, tc];
+                    if (t != null && !t.isDecoy && !t.shielded && EnemyWithin(tr, tc, 2))
+                        score = 3f + (t.maxShards - t.shards);
+                    break;
+                }
+                case AbilityType.Heal:
+                {
+                    int hurt = 0;
+                    for (int ddr = -1; ddr <= 1; ddr++) for (int ddc = -1; ddc <= 1; ddc++)
+                    {
+                        if (ddr == 0 && ddc == 0) continue;
+                        int nr = r + ddr, nc = c + ddc;
+                        if (!BoardManager.InBounds(nr, nc)) continue;
+                        var t = board[nr, nc];
+                        if (t != null && t.player == 2 && t.shards < t.maxShards) hurt++;
+                    }
+                    score = hurt * 3f;
+                    break;
+                }
+                case AbilityType.Decoy:
+                    score = EnemyWithin(r, c, 3) ? 2f : 0f;
+                    break;
+
+                case AbilityType.Pull:
+                {
+                    int caught = 0;
+                    for (int rr = 0; rr < BoardManager.BS; rr++) for (int cc = 0; cc < BoardManager.BS; cc++)
+                    {
+                        if (rr == r && cc == c) continue;
+                        var t = board[rr, cc];
+                        if (t != null && t.player == 1 && !t.isDecoy &&
+                            BoardManager.Cheb(rr, cc, r, c) <= p.ability.range) caught++;
+                    }
+                    score = caught * 3f;
+                    break;
+                }
+            }
+
+            Consider(ref best, new AIAction {
+                kind = AIAction.Kind.Ability, r = r, c = c, tr = tr, tc = tc, score = score
+            });
+        }
+    }
+
+    void ScoreMoves(Piece p, int r, int c, ref AIAction best)
+    {
+        int curDist = DistToNearestEnemy(r, c);
+        if (curDist == int.MaxValue) return;
+
+        foreach (var (mr, mc) in boardManager.GetMoves(r, c))
+        {
+            int d = DistToNearestEnemy(mr, mc);
+            if (d >= curDist) continue;               // only moves that close distance
+            float score = 1f + (curDist - d) * 0.4f;  // kept small — attacks/abilities win ties
+            Consider(ref best, new AIAction {
+                kind = AIAction.Kind.Move, r = r, c = c, tr = mr, tc = mc, score = score
+            });
+        }
+    }
+
+    int DistToNearestEnemy(int r, int c)
+    {
+        var board = boardManager.Board;
+        int bestD = int.MaxValue;
+        for (int rr = 0; rr < BoardManager.BS; rr++) for (int cc = 0; cc < BoardManager.BS; cc++)
+        {
+            var t = board[rr, cc];
+            if (t != null && t.player == 1 && !t.isDecoy)
+                bestD = Mathf.Min(bestD, BoardManager.Cheb(rr, cc, r, c));
+        }
+        return bestD;
+    }
+
+    bool EnemyWithin(int r, int c, int range)
+    {
+        var board = boardManager.Board;
+        for (int rr = 0; rr < BoardManager.BS; rr++) for (int cc = 0; cc < BoardManager.BS; cc++)
+        {
+            var t = board[rr, cc];
+            if (t != null && t.player == 1 && !t.isDecoy && BoardManager.Cheb(rr, cc, r, c) <= range)
+                return true;
+        }
+        return false;
+    }
+
+    void Log(string msg) => turnManager.Log(msg);
+}
