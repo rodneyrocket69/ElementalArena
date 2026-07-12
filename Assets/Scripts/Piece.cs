@@ -35,6 +35,9 @@ public class Piece
     // Aegis passive: personal regenerating shield (separate from Barrier ability shield)
     public bool energyShieldActive;
 
+    // Arena mode: true while this piece is carrying the ball
+    public bool hasBall;
+
     public Piece Clone()
     {
         var c = (Piece)MemberwiseClone();

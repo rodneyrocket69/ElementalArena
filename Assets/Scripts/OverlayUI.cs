@@ -38,7 +38,17 @@ public class OverlayUI : MonoBehaviour
 
     void Start()
     {
+        if (boardManager == null) boardManager = boardVisual.GetComponent<BoardManager>();
+
         BuildCanvas();
+
+        // Mode picker (Classic / Arena Ball) — added here so no scene setup is needed
+        if (FindObjectOfType<ModeSelectUI>() == null)
+        {
+            var ms = gameObject.AddComponent<ModeSelectUI>();
+            ms.turnManager = turnManager;
+            ms.boardVisual = boardVisual;
+        }
 
         turnManager.OnLog          += AppendLog;
         turnManager.OnPhaseChanged += OnPhaseChanged;
@@ -57,6 +67,7 @@ public class OverlayUI : MonoBehaviour
     {
         // Keep ability button state in sync with selection
         bool canAbil = boardVisual.GetSelectedPiece() is { isDecoy: false } p
+                    && p.key != "TOWER"
                     && p.player == 1 && p.abilityCd == 0 && !p.stunned
                     && turnManager.Phase == GamePhase.Player && turnManager.AP > 0;
 
@@ -125,7 +136,16 @@ public class OverlayUI : MonoBehaviour
 
         abilityBtn.onClick.AddListener(() => boardVisual.OnAbilityButton());
         endTurnBtn.onClick.AddListener(() => { if (turnManager.Phase == GamePhase.Player) turnManager.EndPlayerTurn(); });
-        newGameBtn.onClick.AddListener(() => { boardVisual.ResetSelection(); turnManager.ResetGame(); boardVisual.RefreshAll(); logLines.Clear(); });
+        // NEW GAME reopens the mode picker; picking a mode starts the fresh game
+        newGameBtn.onClick.AddListener(() =>
+        {
+            boardVisual.ResetSelection();
+            logLines.Clear();
+            if (logContent != null) logContent.text = "";
+            var ms = FindObjectOfType<ModeSelectUI>();
+            if (ms != null) ms.Show();
+            else { turnManager.ResetGame(); boardVisual.RefreshAll(); }
+        });
 
         endTurnBtn.interactable = true;
     }
@@ -145,12 +165,12 @@ public class OverlayUI : MonoBehaviour
         switch (turnManager.Phase)
         {
             case GamePhase.Player:
-                bannerText.text  = $"TURN {turnManager.TurnNumber} — YOUR TURN — {turnManager.AP} AP remaining";
+                bannerText.text  = $"TURN {turnManager.TurnNumber} — YOUR TURN — {turnManager.AP} AP remaining{GoalsSuffix()}";
                 bannerText.color = Color.white;
                 ParentImage(bannerText).color = BgBanner;
                 break;
             case GamePhase.AI:
-                bannerText.text  = $"TURN {turnManager.TurnNumber} — AI IS THINKING...";
+                bannerText.text  = $"TURN {turnManager.TurnNumber} — AI IS THINKING...{GoalsSuffix()}";
                 bannerText.color = Color.white;
                 ParentImage(bannerText).color = ColAI;
                 break;
@@ -163,6 +183,11 @@ public class OverlayUI : MonoBehaviour
     }
 
     static Image ParentImage(Text t) => t.transform.parent.GetComponent<Image>();
+
+    string GoalsSuffix() =>
+        GameModeState.IsArena && boardManager != null
+            ? $"   |   GOALS {boardManager.GoalsP1}–{boardManager.GoalsP2} (first to {ArenaConfig.GoalsToWin})"
+            : "";
 
     void UpdateAP(int ap)
     {
@@ -201,6 +226,7 @@ public class OverlayUI : MonoBehaviour
             "VERDANT"   => "\nPassive: Life Bloom",
             "MIMIC"     => "\nPassive: Eerie Aura",
             "SHARDIS"   => "\nPassive: Phased Form (phys immune)",
+            "TOWER"     => "\nPassive: Sentry (auto-fires each turn)",
             _           => ""
         };
 

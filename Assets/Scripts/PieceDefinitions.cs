@@ -70,6 +70,29 @@ public static class PieceDefinitions
         return p;
     }
 
+    // Arena mode: stationary corner tower. It never moves, melee-attacks, or casts —
+    // BoardManager.TowerVolleys fires it automatically at the end of its team's turn.
+    public static Piece MakeTower(int player, string id)
+    {
+        return new Piece
+        {
+            key       = "TOWER",
+            id        = id,
+            player    = player,
+            pieceName = player == 1 ? "Allied Tower" : "Enemy Tower",
+            cls       = "Tower",
+            maxShards = ArenaConfig.TowerHP,
+            shards    = ArenaConfig.TowerHP,
+            move      = 0,
+            dmg       = ArenaConfig.TowerDamage,
+            ability   = new AbilityDef {
+                name = "Sentry Volley",
+                desc = $"Automatically fires at an enemy within {ArenaConfig.TowerDefenseRange} tiles at the end of its team's turn.",
+                range = ArenaConfig.TowerDefenseRange, cooldown = 0, type = AbilityType.Damage
+            },
+        };
+    }
+
     public static Piece MakeDecoy(Piece owner)
     {
         return new Piece

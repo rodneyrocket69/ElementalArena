@@ -33,6 +33,11 @@ public class BoardVisual : MonoBehaviour
     static readonly Color P2Color   = new(0.15f, 0.40f, 0.70f);
     static readonly Color DecoyCol  = new(0.85f, 0.44f, 0.84f);
 
+    // ── arena colors ──────────────────────────────────────────────────────────
+    static readonly Color GoalOpenCol    = new(0.98f, 0.73f, 0.25f); // scorable goal tile
+    static readonly Color GoalBlockedCol = new(0.46f, 0.42f, 0.38f); // corner tower still guards this tile
+    static readonly Color BallCol        = new(1.00f, 0.78f, 0.10f);
+
     // ── status tint colors ────────────────────────────────────────────────────
     static readonly Color StunTint    = new(1.00f, 0.90f, 0.10f);
     static readonly Color RootTint    = new(0.20f, 0.80f, 0.20f);
@@ -45,6 +50,7 @@ public class BoardVisual : MonoBehaviour
     GameObject[,] tiles;
     readonly Dictionary<Piece, PieceView> pieceViews = new();
     GameObject pieceParent;
+    GameObject ballView;   // arena mode only
 
     // ── drag state ────────────────────────────────────────────────────────────
     PieceView    dragView;    // non-null while carrying a piece
@@ -162,8 +168,8 @@ public class BoardVisual : MonoBehaviour
         inspectedCell = new[] { r, c };
         OnSelectionChanged?.Invoke();
 
-        // Holding on one of our pieces starts attack aiming
-        if (piece.player == 1 && !piece.isDecoy && turnManager.AP > 0)
+        // Holding on one of our pieces starts attack aiming (towers fire on their own)
+        if (piece.player == 1 && !piece.isDecoy && piece.key != "TOWER" && turnManager.AP > 0)
         {
             aimOrigin    = new[] { r, c };
             aimAttacks   = board.GetAttacks(r, c);
@@ -539,6 +545,7 @@ public class BoardVisual : MonoBehaviour
     {
         RefreshTileColors();
         RefreshPieces();
+        RefreshBall();
     }
 
     void RefreshTileColors()
@@ -571,8 +578,17 @@ public class BoardVisual : MonoBehaviour
             else if (isMove) col = MoveCol;
             else
             {
-                // Status effect tile tint for occupied tiles
                 col = BaseTileColor(r, c);
+
+                // Arena: paint each back row's goal zone (open vs tower-blocked)
+                if (GameModeState.IsArena)
+                {
+                    int attacker = r == 0 ? 1 : r == BoardManager.BS - 1 ? 2 : 0;
+                    if (attacker != 0 && board.IsGoalTile(attacker, r, c))
+                        col = board.IsGoalOpen(attacker, r, c) ? GoalOpenCol : GoalBlockedCol;
+                }
+
+                // Status effect tile tint for occupied tiles
                 var p = board.Board[r, c];
                 if (p != null)
                 {
@@ -637,6 +653,52 @@ public class BoardVisual : MonoBehaviour
             pieceViews.Remove(p);
             if (view != null) StartCoroutine(ShrinkAway(view.gameObject));
         }
+    }
+
+    // The ball: a golden sphere that sits on its tile when loose,
+    // or rides on top of the carrier's view when held
+    void RefreshBall()
+    {
+        if (!GameModeState.IsArena)
+        {
+            if (ballView != null) { Destroy(ballView); ballView = null; }
+            return;
+        }
+
+        if (ballView == null)
+        {
+            ballView = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            ballView.name = "Ball";
+            Destroy(ballView.GetComponent<Collider>());
+            ballView.transform.localScale = Vector3.one * 0.34f;
+            ballView.GetComponent<Renderer>().material.color = BallCol;
+        }
+        ballView.SetActive(true);
+
+        if (board.BallLoose)
+        {
+            ballView.transform.SetParent(null);
+            ballView.transform.localScale = Vector3.one * 0.34f;
+            ballView.transform.position = WorldPos(board.BallR, board.BallC, 0.30f);
+            return;
+        }
+
+        for (int r = 0; r < BoardManager.BS; r++)
+        for (int c = 0; c < BoardManager.BS; c++)
+        {
+            var p = board.Board[r, c];
+            if (p == null || !p.hasBall) continue;
+            if (pieceViews.TryGetValue(p, out var view))
+            {
+                ballView.transform.SetParent(view.transform, false);
+                ballView.transform.localPosition = new Vector3(0, pieceRadius * 2f + 0.55f, 0);
+            }
+            return;
+        }
+
+        // No loose ball and no carrier on the board — shouldn't happen, but don't strand a stale sphere
+        ballView.transform.SetParent(null);
+        ballView.SetActive(false);
     }
 
     // Dead pieces shrink to nothing instead of vanishing instantly
@@ -731,6 +793,11 @@ public class BoardVisual : MonoBehaviour
             case "SHARDIS":   // tilted crystal
                 Part(body, PrimitiveType.Cube,     Vector3.zero,              Vector3.one * 0.34f, new Vector3(45, 45, 0));
                 break;
+            case "TOWER":     // corner turret: base slab + column + cap
+                Part(body, PrimitiveType.Cube,     new Vector3(0, -0.18f, 0), new Vector3(0.58f, 0.18f, 0.58f));
+                Part(body, PrimitiveType.Cylinder, new Vector3(0,  0.08f, 0), new Vector3(0.34f, 0.28f, 0.34f));
+                Part(body, PrimitiveType.Cube,     new Vector3(0,  0.42f, 0), new Vector3(0.46f, 0.14f, 0.46f));
+                break;
             default:          // fallback: the old squat cylinder
                 Part(body, PrimitiveType.Cylinder, Vector3.zero,              new Vector3(0.52f, 0.28f, 0.52f));
                 break;
@@ -754,8 +821,9 @@ public class BoardVisual : MonoBehaviour
         Color full  = piece.player == 1 ? P1Color : P2Color;
         Color empty = new Color(0.55f, 0.55f, 0.55f);
 
-        // Child 0 is the body; children 1..n are the pips
-        for (int i = 1; i < view.transform.childCount; i++)
+        // Child 0 is the body; children 1..maxShards are the pips.
+        // (Stop there — the carried ball parents itself after the pips.)
+        for (int i = 1; i <= piece.maxShards && i < view.transform.childCount; i++)
             SetColor(view.transform.GetChild(i).gameObject, (i - 1) < piece.shards ? full : empty);
     }
 

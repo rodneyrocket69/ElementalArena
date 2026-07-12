@@ -69,7 +69,7 @@ public class AIController : MonoBehaviour
         for (int c = 0; c < BoardManager.BS; c++)
         {
             var p = board[r, c];
-            if (p == null || p.player != 2 || p.isDecoy || p.stunned) continue;
+            if (p == null || p.player != 2 || p.isDecoy || p.stunned || p.key == "TOWER") continue;
 
             ScoreAttacks(p, r, c, ref best);
             ScoreAbility(p, r, c, ref best);
@@ -103,6 +103,7 @@ public class AIController : MonoBehaviour
     {
         if (isPhysical && (t.key == "BULWARK" || t.key == "SHARDIS" || t.key == "FROSTBITE"))
             return 0f;                                    // immune/absorbed — wasted action
+        if (t.hasBall) return 20f;                        // stop the carrier above all else
         if (t.isDecoy) return 2f;                         // pop the phantom
         if (t.energyShieldActive || t.shielded) return 2f;// burns a shield, no damage yet
         if (t.shards == 1) return 15f;                    // kill shot
@@ -219,6 +220,8 @@ public class AIController : MonoBehaviour
 
     void ScoreMoves(Piece p, int r, int c, ref AIAction best)
     {
+        if (GameModeState.IsArena) { ScoreArenaMoves(p, r, c, ref best); return; }
+
         int curDist = DistToNearestEnemy(r, c);
         if (curDist == int.MaxValue) return;
 
@@ -231,6 +234,72 @@ public class AIController : MonoBehaviour
                 kind = AIAction.Kind.Move, r = r, c = c, tr = mr, tc = mc, score = score
             });
         }
+    }
+
+    // Arena priorities: score a goal > grab the loose ball > chase the enemy carrier
+    void ScoreArenaMoves(Piece p, int r, int c, ref AIAction best)
+    {
+        foreach (var (mr, mc) in boardManager.GetMoves(r, c))
+        {
+            float score = 0f;
+
+            if (p.hasBall)
+            {
+                if (boardManager.IsGoalTile(2, mr, mc) && boardManager.IsGoalOpen(2, mr, mc))
+                    score = 100f;                          // stepping onto an open goal tile scores
+                else
+                {
+                    int cur = DistToGoal(r, c), d = DistToGoal(mr, mc);
+                    if (d < cur) score = 6f + (cur - d) * 2f;
+                }
+            }
+            else if (boardManager.BallLoose)
+            {
+                if (mr == boardManager.BallR && mc == boardManager.BallC)
+                    score = 12f;                           // landing on the ball picks it up
+                else
+                {
+                    int cur = BoardManager.Cheb(r, c, boardManager.BallR, boardManager.BallC);
+                    int d   = BoardManager.Cheb(mr, mc, boardManager.BallR, boardManager.BallC);
+                    if (d < cur) score = 2f + (cur - d) * 0.5f;
+                }
+            }
+            else
+            {
+                var (cr, cc) = FindEnemyCarrier();
+                if (cr >= 0)
+                {
+                    int cur = BoardManager.Cheb(r, c, cr, cc);
+                    int d   = BoardManager.Cheb(mr, mc, cr, cc);
+                    if (d < cur) score = 3f + (cur - d) * 0.8f;
+                }
+            }
+
+            if (score > 0f)
+                Consider(ref best, new AIAction { kind = AIAction.Kind.Move, r = r, c = c, tr = mr, tc = mc, score = score });
+        }
+    }
+
+    // Chebyshev distance to the closest open goal tile on the player's back row
+    int DistToGoal(int r, int c)
+    {
+        int gr = BoardManager.GoalRowFor(2), best = int.MaxValue;
+        for (int gc = ArenaConfig.GoalZoneMinCol; gc <= ArenaConfig.GoalZoneMaxCol; gc++)
+        {
+            if (!boardManager.IsGoalOpen(2, gr, gc)) continue;
+            best = Mathf.Min(best, BoardManager.Cheb(r, c, gr, gc));
+        }
+        return best;
+    }
+
+    (int, int) FindEnemyCarrier()
+    {
+        for (int r = 0; r < BoardManager.BS; r++) for (int c = 0; c < BoardManager.BS; c++)
+        {
+            var t = boardManager.Board[r, c];
+            if (t != null && t.player == 1 && t.hasBall) return (r, c);
+        }
+        return (-1, -1);
     }
 
     int DistToNearestEnemy(int r, int c)
