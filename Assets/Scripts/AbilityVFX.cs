@@ -133,7 +133,7 @@ public class AbilityVFX : MonoBehaviour
         Destroy(go.GetComponent<Collider>());
         go.transform.position   = pos;
         go.transform.localScale = scale;
-        go.GetComponent<Renderer>().material.color = col;
+        FlatKitMaterials.Tint(go, col);
         return go;
     }
 

@@ -249,8 +249,7 @@ public class BoardVisual : MonoBehaviour
         aimBeam.transform.position   = (from + to) * 0.5f;
         aimBeam.transform.rotation   = Quaternion.FromToRotation(Vector3.up, (to - from).normalized);
         aimBeam.transform.localScale = new Vector3(w, len * 0.5f, w);
-        aimBeam.GetComponent<Renderer>().material.color =
-            valid ? AimHoverCol : new Color(0.75f, 0.55f, 0.50f);
+        FlatKitMaterials.Tint(aimBeam, valid ? AimHoverCol : new Color(0.75f, 0.55f, 0.50f));
     }
 
     void EndAim()
@@ -636,7 +635,7 @@ public class BoardVisual : MonoBehaviour
             // Tint every shape part that makes up the body
             Color col = PieceColor(piece);
             foreach (var rend in body.GetComponentsInChildren<Renderer>())
-                rend.material.color = col;
+                FlatKitMaterials.Tint(rend, col, outlined: true);
 
             // Glide to the current board position — unless the player is carrying it
             if (!view.carried) view.targetPos = WorldPos(r, c, 0);
@@ -671,7 +670,7 @@ public class BoardVisual : MonoBehaviour
             ballView.name = "Ball";
             Destroy(ballView.GetComponent<Collider>());
             ballView.transform.localScale = Vector3.one * 0.34f;
-            ballView.GetComponent<Renderer>().material.color = BallCol;
+            FlatKitMaterials.Tint(ballView, BallCol, outlined: true);
         }
         ballView.SetActive(true);
 
@@ -873,9 +872,6 @@ public class BoardVisual : MonoBehaviour
         return col;
     }
 
-    static void SetColor(GameObject go, Color col)
-    {
-        var rend = go.GetComponent<Renderer>();
-        if (rend != null) rend.material.color = col;
-    }
+    static void SetColor(GameObject go, Color col) =>
+        FlatKitMaterials.Tint(go.GetComponent<Renderer>(), col);
 }
