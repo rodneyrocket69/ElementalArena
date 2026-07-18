@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -40,6 +41,7 @@ public class ModeSelectUI : MonoBehaviour
         var cv   = cvGo.AddComponent<Canvas>();
         cv.renderMode   = RenderMode.ScreenSpaceOverlay;
         cv.sortingOrder = 20; // above the HUD canvas (10)
+        cv.pixelPerfect = true; // whole-pixel snapping — see OverlayUI.BuildCanvas
         var scaler = cvGo.AddComponent<CanvasScaler>();
         scaler.uiScaleMode         = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
@@ -62,9 +64,9 @@ public class ModeSelectUI : MonoBehaviour
         crt.sizeDelta = new Vector2(560, 420);
         card.GetComponent<Image>().color = CardCol;
 
-        MakeText(card.transform, "ELEMENTAL ARENA", 30, FontStyle.Bold, new Color(1f, 0.9f, 0.5f),
+        MakeText(card.transform, "ELEMENTAL ARENA", 30, FontStyles.Bold, new Color(1f, 0.9f, 0.5f),
             new Vector2(0, 145), new Vector2(520, 44));
-        MakeText(card.transform, "Choose a game mode", 15, FontStyle.Normal, new Color(0.8f, 0.8f, 0.8f),
+        MakeText(card.transform, "Choose a game mode", 15, FontStyles.Normal, new Color(0.8f, 0.8f, 0.8f),
             new Vector2(0, 108), new Vector2(520, 26));
 
         MakeModeButton(card.transform, "CLASSIC",
@@ -98,26 +100,25 @@ public class ModeSelectUI : MonoBehaviour
         btn.colors = colors;
         btn.onClick.AddListener(onClick);
 
-        MakeText(go.transform, title, 20, FontStyle.Bold, Color.white,
+        MakeText(go.transform, title, 20, FontStyles.Bold, Color.white,
             new Vector2(0, 30), new Vector2(450, 30));
-        MakeText(go.transform, desc, 12, FontStyle.Normal, new Color(0.95f, 0.95f, 0.95f),
+        MakeText(go.transform, desc, 12, FontStyles.Normal, new Color(0.95f, 0.95f, 0.95f),
             new Vector2(0, -22), new Vector2(450, 60));
     }
 
-    static Text MakeText(Transform parent, string content, int size, FontStyle style, Color col,
+    static TMP_Text MakeText(Transform parent, string content, int size, FontStyles style, Color col,
         Vector2 pos, Vector2 sizeDelta)
     {
-        var go = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        var go = new GameObject("Text", typeof(RectTransform));
         go.transform.SetParent(parent, false);
         var rt = go.GetComponent<RectTransform>();
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.anchoredPosition = pos;
         rt.sizeDelta = sizeDelta;
-        var txt = go.GetComponent<Text>();
-        txt.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        var txt = go.AddComponent<TextMeshProUGUI>();
         txt.fontSize  = size;
         txt.fontStyle = style;
-        txt.alignment = TextAnchor.MiddleCenter;
+        txt.alignment = TextAlignmentOptions.Center;
         txt.color     = col;
         txt.text      = content;
         return txt;

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -12,13 +13,13 @@ public class OverlayUI : MonoBehaviour
     public BoardManager boardManager;
 
     // ── built UI refs ─────────────────────────────────────────────────────────
-    Text       bannerText;
-    Text       apText;
-    Text       infoText;
-    Text       logContent;
+    TMP_Text   bannerText;
+    TMP_Text   apText;
+    TMP_Text   infoText;
+    TMP_Text   logContent;
     ScrollRect logScrollRect;
     Button     abilityBtn;
-    Text       abilityBtnLabel;
+    TMP_Text   abilityBtnLabel;
     Button     endTurnBtn;
     Button     newGameBtn;
 
@@ -95,6 +96,10 @@ public class OverlayUI : MonoBehaviour
         var cv   = cvGo.AddComponent<Canvas>();
         cv.renderMode = RenderMode.ScreenSpaceOverlay;
         cv.sortingOrder = 10;
+        // Snap UI geometry to whole device pixels. With ScaleWithScreenSize, any
+        // non-1080p window gives a fractional scale factor, which lands glyphs on
+        // sub-pixel positions and bilinear-blurs every character.
+        cv.pixelPerfect = true;
         var scaler = cvGo.AddComponent<CanvasScaler>();
         scaler.uiScaleMode         = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
@@ -106,7 +111,7 @@ public class OverlayUI : MonoBehaviour
             new Vector2(0, 1), new Vector2(1, 1),
             new Vector2(0, -25), new Vector2(0, 25),
             BgBanner);
-        bannerText = MakeText(bannerGo.transform, "BannerText", 18, TextAnchor.MiddleCenter, Color.white,
+        bannerText = MakeText(bannerGo.transform, "BannerText", 18, TextAlignmentOptions.Center, Color.white,
             Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
         // Right sidebar
@@ -116,15 +121,15 @@ public class OverlayUI : MonoBehaviour
             BgPanel);
 
         // AP label
-        apText = MakeText(sidebar.transform, "APText", 14, TextAnchor.UpperLeft, Color.white,
+        apText = MakeText(sidebar.transform, "APText", 14, TextAlignmentOptions.TopLeft, Color.white,
             new Vector2(0, 1), new Vector2(1, 1),
             new Vector2(10, -50), new Vector2(-10, 0));
 
         // Info panel
-        infoText = MakeText(sidebar.transform, "InfoText", 12, TextAnchor.UpperLeft, new Color(0.9f, 0.9f, 0.9f),
+        infoText = MakeText(sidebar.transform, "InfoText", 12, TextAlignmentOptions.TopLeft, new Color(0.9f, 0.9f, 0.9f),
             new Vector2(0, 1), new Vector2(1, 1),
             new Vector2(10, -220), new Vector2(-10, -80));
-        infoText.GetComponent<RectTransform>().GetComponent<Text>().text = "Tap a piece to inspect.";
+        infoText.text = "Tap a piece to inspect.";
 
         // Log (scrollable)
         BuildLogScroll(sidebar.transform);
@@ -175,14 +180,14 @@ public class OverlayUI : MonoBehaviour
                 ParentImage(bannerText).color = ColAI;
                 break;
             case GamePhase.Over:
-                bannerText.text  = turnManager.Winner == 1 ? "⚑  PLAYER I VICTORIOUS" : "⚑  AI VICTORIOUS";
+                bannerText.text  = turnManager.Winner == 1 ? "« PLAYER I VICTORIOUS »" : "« AI VICTORIOUS »";
                 bannerText.color = new Color(1f, 0.9f, 0.3f);
                 ParentImage(bannerText).color = ColOver;
                 break;
         }
     }
 
-    static Image ParentImage(Text t) => t.transform.parent.GetComponent<Image>();
+    static Image ParentImage(TMP_Text t) => t.transform.parent.GetComponent<Image>();
 
     string GoalsSuffix() =>
         GameModeState.IsArena && boardManager != null
@@ -191,7 +196,8 @@ public class OverlayUI : MonoBehaviour
 
     void UpdateAP(int ap)
     {
-        if (apText) apText.text = $"ACTION POINTS:  {ap} / 2\n" + (ap > 0 ? new string('●', ap) + new string('○', 2 - ap) : "○○");
+        // • / · pips — chosen because both glyphs exist in the LiberationSans SDF atlas
+        if (apText) apText.text = $"ACTION POINTS:  {ap} / 2\n" + new string('•', ap) + new string('·', 2 - ap);
         UpdateBanner();
     }
 
@@ -220,12 +226,12 @@ public class OverlayUI : MonoBehaviour
             "FLARE"     => "\nPassive: Scorch",
             "VOLTIX"    => "\nPassive: Static Charge",
             "ZEPHYROS"  => "\nPassive: Windborn (root immune)",
-            "FROSTBITE" => "\nPassive: Ice Armor (phys immune)",
-            "BULWARK"   => "\nPassive: Battle Hardened (phys immune)",
-            "AEGIS"     => "\nPassive: Energy Shield",
+            "FROSTBITE" => "\nPassive: Ice Armor (-1 phys dmg; off while weakened)",
+            "BULWARK"   => "\nPassive: Battle Hardened (phys immune; off while weakened)",
+            "AEGIS"     => "\nPassive: Energy Shield (regens on own kills)",
             "VERDANT"   => "\nPassive: Life Bloom",
             "MIMIC"     => "\nPassive: Eerie Aura",
-            "SHARDIS"   => "\nPassive: Phased Form (phys immune)",
+            "SHARDIS"   => "\nPassive: Phased Form (phys immune; off while weakened)",
             "TOWER"     => "\nPassive: Sentry (auto-fires each turn)",
             _           => ""
         };
@@ -240,10 +246,6 @@ public class OverlayUI : MonoBehaviour
 
     void AppendLog(string msg)
     {
-        // TEMP diagnostic: mirrors every log line to the Unity Console so we can
-        // tell whether log events fire at all (remove once the log bug is solved)
-        Debug.Log($"[BattleLog] {msg}");
-
         logLines.Add(msg);
         // Cap history: enough for many turns, but safely under the Text mesh limit
         while (logLines.Count > 150) logLines.RemoveAt(0);
@@ -255,12 +257,10 @@ public class OverlayUI : MonoBehaviour
                         || logContent.preferredHeight <= logScrollRect.viewport.rect.height;
 
         logContent.text = string.Join("\n", logLines);
-        var rt = (RectTransform)logContent.transform;
-        rt.sizeDelta = new Vector2(rt.sizeDelta.x, logContent.preferredHeight);
 
         if (wasAtBottom)
         {
-            Canvas.ForceUpdateCanvases(); // apply the new height before pinning
+            Canvas.ForceUpdateCanvases(); // let the ContentSizeFitter apply the new height
             logScrollRect.verticalNormalizedPosition = 0f;
         }
     }
@@ -284,18 +284,25 @@ public class OverlayUI : MonoBehaviour
         logScrollRect.scrollSensitivity = 25f;
         logScrollRect.movementType      = ScrollRect.MovementType.Clamped;
 
-        var vpGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
+        // Panel title
+        var header = MakeText(scrollGo.transform, "LogHeader", 11, TextAlignmentOptions.Left,
+            new Color(0.62f, 0.62f, 0.72f),
+            new Vector2(0, 1), new Vector2(1, 1), new Vector2(8, -18), new Vector2(-8, 0));
+        header.text      = "BATTLE LOG";
+        header.fontStyle = FontStyles.Bold;
+
+        // Viewport clips with RectMask2D, NOT a stencil Mask: a Mask over a fully
+        // transparent Image gets its mesh culled (cullTransparentMesh), so the
+        // stencil never writes and every masked child — the log text — is invisible.
+        var vpGo = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
         vpGo.transform.SetParent(scrollGo.transform, false);
         var vpRt = vpGo.GetComponent<RectTransform>();
         vpRt.anchorMin = Vector2.zero;
         vpRt.anchorMax = Vector2.one;
         vpRt.offsetMin = new Vector2(4, 4);
-        vpRt.offsetMax = new Vector2(-4, -4);
-        vpGo.GetComponent<Image>().color = Color.clear;
-        vpGo.GetComponent<Mask>().showMaskGraphic = false;
+        vpRt.offsetMax = new Vector2(-4, -20); // clear of the title strip
 
-        var contentGo = new GameObject("Content",
-            typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        var contentGo = new GameObject("Content", typeof(RectTransform));
         contentGo.transform.SetParent(vpGo.transform, false);
         var contentRt = contentGo.GetComponent<RectTransform>();
         contentRt.anchorMin = new Vector2(0, 1);
@@ -305,14 +312,16 @@ public class OverlayUI : MonoBehaviour
         contentRt.offsetMax = Vector2.zero;
         contentRt.sizeDelta = Vector2.zero;
 
-        logContent = contentGo.GetComponent<Text>();
-        logContent.font               = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        logContent.fontSize           = 11;
-        logContent.alignment          = TextAnchor.UpperLeft;
-        logContent.color              = new Color(0.75f, 0.75f, 0.75f);
-        logContent.verticalOverflow   = VerticalWrapMode.Overflow;
-        logContent.horizontalOverflow = HorizontalWrapMode.Wrap;
-        logContent.supportRichText    = true;
+        logContent = contentGo.AddComponent<TextMeshProUGUI>();
+        logContent.fontSize  = 11;
+        logContent.alignment = TextAlignmentOptions.TopLeft;
+        logContent.color     = new Color(0.75f, 0.75f, 0.75f);
+        logContent.richText  = true;
+
+        // Height tracks the text automatically — no manual preferredHeight math,
+        // which read a stale (zero-width) layout during the first frames
+        var fitter = contentGo.AddComponent<ContentSizeFitter>();
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
         logScrollRect.viewport = vpRt;
         logScrollRect.content  = contentRt;
@@ -334,25 +343,24 @@ public class OverlayUI : MonoBehaviour
         return go;
     }
 
-    static Text MakeText(Transform parent, string name, int fontSize, TextAnchor anchor, Color col,
+    static TMP_Text MakeText(Transform parent, string name, int fontSize, TextAlignmentOptions anchor, Color col,
         Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
     {
-        var go   = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        var go   = new GameObject(name, typeof(RectTransform));
         go.transform.SetParent(parent, false);
         var rt   = go.GetComponent<RectTransform>();
         rt.anchorMin = anchorMin; rt.anchorMax = anchorMax;
         rt.offsetMin = offsetMin; rt.offsetMax = offsetMax;
-        var txt  = go.GetComponent<Text>();
-        txt.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        var txt  = go.AddComponent<TextMeshProUGUI>();
         txt.fontSize  = fontSize;
         txt.alignment = anchor;
         txt.color     = col;
-        txt.supportRichText = true;
+        txt.richText  = true;
         return txt;
     }
 
     static Button MakeButton(Transform parent, string name, string label, Color col,
-        Vector2 anchoredPos, out Text labelText)
+        Vector2 anchoredPos, out TMP_Text labelText)
     {
         var go  = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         go.transform.SetParent(parent, false);
@@ -363,18 +371,17 @@ public class OverlayUI : MonoBehaviour
         rt.sizeDelta       = new Vector2(-20, 36);
         go.GetComponent<Image>().color = col;
 
-        var lblGo = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        var lblGo = new GameObject("Label", typeof(RectTransform));
         lblGo.transform.SetParent(go.transform, false);
         var lrt = lblGo.GetComponent<RectTransform>();
         lrt.anchorMin = Vector2.zero; lrt.anchorMax = Vector2.one;
         lrt.offsetMin = Vector2.zero; lrt.offsetMax = Vector2.zero;
-        var txt  = lblGo.GetComponent<Text>();
-        txt.font      = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        var txt  = lblGo.AddComponent<TextMeshProUGUI>();
         txt.fontSize  = 13;
-        txt.alignment = TextAnchor.MiddleCenter;
+        txt.alignment = TextAlignmentOptions.Center;
         txt.color     = Color.white;
         txt.text      = label;
-        txt.fontStyle = FontStyle.Bold;
+        txt.fontStyle = FontStyles.Bold;
         labelText = txt;
 
         var btn = go.GetComponent<Button>();

@@ -24,17 +24,19 @@ public static class PieceDefinitions
         // ── Defense ─────────────────────────────────────────────────────────
         ["FROSTBITE"] = new Piece {
             key="FROSTBITE", pieceName="Frostbite", cls="Defense", maxShards=4, move=2, dmg=1,
-            // Passive: Ice Armor — 1 physical damage reduction (attacks do 0)
+            // Passive: Ice Armor — reduces physical damage by 1 (disabled while weakened)
             ability=new AbilityDef { name="Glacial Impact", desc="Root all enemies in a 3×3 area around target tile (cast range 2).", range=2, cooldown=4, type=AbilityType.Freeze }
         },
         ["BULWARK"] = new Piece {
             key="BULWARK", pieceName="Bulwark", cls="Defense", maxShards=4, move=2, dmg=1,
-            // Passive: Battle Hardened — immune to physical (attack) damage
-            ability=new AbilityDef { name="Magnetic Fortress", desc="Redirect all attack damage aimed at allies within 2 tiles to Bulwark for 2 turns.", range=0, cooldown=3, type=AbilityType.Fortress }
+            // Passive: Battle Hardened — immune to physical (attack) damage (disabled while
+            // weakened; Fortress-redirected hits pierce it so Bulwark truly absorbs them)
+            ability=new AbilityDef { name="Magnetic Fortress", desc="Redirect all attack damage aimed at allies within 2 tiles to Bulwark for 2 turns. Redirected hits damage Bulwark.", range=0, cooldown=3, type=AbilityType.Fortress }
         },
         ["AEGIS"] = new Piece {
             key="AEGIS", pieceName="Aegis", cls="Defense", maxShards=4, move=3, dmg=1,
-            // Passive: Energy Shield — personal barrier blocks 1 hit; regenerates when any friendly kills an enemy
+            // Passive: Energy Shield — personal barrier blocks 1 hit; regenerates only when
+            // Aegis itself kills an enemy (disabled while weakened)
             ability=new AbilityDef { name="Barrier", desc="Shield an ally within 3 tiles for 2 turns. Absorbs one hit.", range=3, cooldown=3, type=AbilityType.Barrier }
         },
 
@@ -51,8 +53,8 @@ public static class PieceDefinitions
         },
         ["SHARDIS"] = new Piece {
             key="SHARDIS", pieceName="Shardis", cls="Support", maxShards=3, move=2, dmg=1,
-            // Passive: Phased Form — immune to physical (attack) damage
-            ability=new AbilityDef { name="Gravitic Distortion", desc="Pull all pieces within 3 tiles 1 step toward Shardis. Enemies weakened for 2 turns.", range=3, cooldown=5, type=AbilityType.Pull }
+            // Passive: Phased Form — immune to physical (attack) damage (disabled while weakened)
+            ability=new AbilityDef { name="Gravitic Distortion", desc="Pull all pieces within 3 tiles 1 step toward Shardis. Enemies weakened for 2 turns — weakened pieces lose their defensive passives.", range=3, cooldown=5, type=AbilityType.Pull }
         },
     };
 

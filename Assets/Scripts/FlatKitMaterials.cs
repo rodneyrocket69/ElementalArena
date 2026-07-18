@@ -47,4 +47,42 @@ public static class FlatKitMaterials
         Tint(go.GetComponent<Renderer>(), col, outlined);
 
     static bool IsOutlined(Material m) => m.IsKeywordEnabled("DR_OUTLINE_ON");
+
+    static Material _transparent;
+
+    // Alpha-blended unlit material for ghosted effects (shield bubbles).
+    // Alpha comes from the color you pass in.
+    public static void TintTransparent(GameObject go, Color col)
+    {
+        var rend = go.GetComponent<Renderer>();
+        if (rend == null) return;
+
+        if (_transparent == null)
+        {
+            var sh = Shader.Find("Universal Render Pipeline/Unlit");
+            if (sh == null) sh = Shader.Find("Sprites/Default"); // non-URP fallback
+            _transparent = new Material(sh);
+            if (_transparent.HasProperty("_Surface"))
+            {
+                _transparent.SetFloat("_Surface", 1f); // URP: transparent surface
+                _transparent.SetFloat("_Blend",   0f); // alpha blend
+                _transparent.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                _transparent.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                _transparent.SetInt("_ZWrite", 0);
+                _transparent.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                _transparent.SetOverrideTag("RenderType", "Transparent");
+            }
+            _transparent.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        }
+
+        if (rend.sharedMaterial == null || rend.sharedMaterial.shader != _transparent.shader)
+        {
+            rend.material = new Material(_transparent);
+            rend.material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        }
+
+        var m = rend.material;
+        if (m.HasProperty(BaseColorId)) m.SetColor(BaseColorId, col);
+        else m.color = col;
+    }
 }

@@ -8,6 +8,12 @@ public class PieceView : MonoBehaviour
     public Vector3 targetPos;
     public bool    carried;
 
+    // Shield visuals, created by BoardVisual.CreateView and toggled per refresh
+    [HideInInspector] public GameObject shieldBubble;    // translucent orb around the body
+    [HideInInspector] public GameObject barrierPip;      // cyan pip beside the shard row
+    [HideInInspector] public GameObject energyPip;       // violet pip (Aegis Energy Shield)
+    [HideInInspector] public Vector3    bubbleBaseScale; // pulse animates around this
+
     const float MoveSmoothTime  = 0.09f; // normal glide between tiles
     const float CarrySmoothTime = 0.16f; // floatier while held, drifts behind the cursor
     const float TiltPerSpeed    = 5f;    // degrees of lean per unit/sec of drift velocity
@@ -30,6 +36,15 @@ public class PieceView : MonoBehaviour
             targetRot = Quaternion.Euler(tiltX, 0f, tiltZ);
         }
         transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * TiltRecover);
+
+        // Active shield bubble breathes gently and drifts around so it reads
+        // as an energy field rather than a solid ball
+        if (shieldBubble != null && shieldBubble.activeSelf)
+        {
+            float pulse = 1f + Mathf.Sin(Time.time * 3f) * 0.05f;
+            shieldBubble.transform.localScale = bubbleBaseScale * pulse;
+            shieldBubble.transform.Rotate(0f, 25f * Time.deltaTime, 0f);
+        }
     }
 
     // Place instantly with no glide (used when the piece is first created)

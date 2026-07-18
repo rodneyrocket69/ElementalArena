@@ -241,9 +241,13 @@ public class BoardManager : MonoBehaviour
         Board[nr, nc] = piece;
         Board[row, col] = null;
 
-        if (piece.key == "VOLTIX" && piece.staticCharges < 3) piece.staticCharges++;
+        Log($"{N(piece)} moves {Cell(row, col)} » {Cell(nr, nc)}.");
 
-        Log($"{piece.pieceName} moves ({row},{col})→({nr},{nc}).");
+        if (piece.key == "VOLTIX" && piece.staticCharges < 3)
+        {
+            piece.staticCharges++;
+            Log($"{Detail}<color=#ffb347>Static Charge builds: {piece.staticCharges}/3.</color>");
+        }
 
         if (GameModeState.IsArena) OnArenaTileEntered(piece, nr, nc, viaOwnMove: true);
         return true;
@@ -264,14 +268,16 @@ public class BoardManager : MonoBehaviour
                 Cheb(r, c, tr, tc) <= 2 && !(r == tr && c == tc))
             {
                 ar = r; ac = c;
-                Log($"Fortress: damage redirected to {Board[ar,ac].pieceName}.");
                 break;
             }
         }
 
         OnAttackVfx?.Invoke(row, col, ar, ac);
-        Log($"{attacker.pieceName} attacks {Board[ar, ac]?.pieceName}!");
-        ApplyDamage(ar, ac, isPhysical: true, killerPlayer: attacker.player);
+        bool redirected = ar != tr || ac != tc;
+        Log($"{N(attacker)} attacks {N(Board[tr, tc])} at {Cell(tr, tc)}!");
+        if (redirected)
+            Log($"{Detail}<color=#6bd6e6>Magnetic Fortress drags the blow onto {N(Board[ar, ac])} at {Cell(ar, ac)}!</color>");
+        ApplyDamage(ar, ac, isPhysical: true, killer: attacker, amount: attacker.dmg, redirected: redirected);
         return true;
     }
 
@@ -291,28 +297,42 @@ public class BoardManager : MonoBehaviour
             case AbilityType.Damage:
             {
                 var t = Board[tr, tc];
-                if (t != null) { Log($"{piece.pieceName} fires {ab.name} at {t.pieceName}!"); ApplyDamage(tr, tc, false, piece.player); }
+                if (t != null)
+                {
+                    Log($"{N(piece)} fires <b>{ab.name}</b> at {N(t)} ({Cell(tr, tc)})!");
+                    ApplyDamage(tr, tc, false, piece, piece.dmg);
+                }
                 break;
             }
             case AbilityType.Line:
             {
                 int dr = Math.Sign(tr-row), dc = Math.Sign(tc-col);
+                Log($"{N(piece)} unleashes <b>{ab.name}</b> from {Cell(row, col)}!");
                 int nr = row+dr, nc = col+dc;
+                bool connected = false;
                 while (InBounds(nr, nc))
                 {
                     var t = Board[nr, nc];
                     if (t != null)
                     {
-                        if (t.player != piece.player) { Log($"Gale Slash hits {t.pieceName}!"); ApplyDamage(nr, nc, false, piece.player); }
+                        connected = true;
+                        if (t.player != piece.player)
+                        {
+                            Log($"{Detail}The wave strikes {N(t)} at {Cell(nr, nc)}!");
+                            ApplyDamage(nr, nc, false, piece, piece.dmg);
+                        }
+                        else Log($"{Detail}The wave dissipates against friendly {N(t)} at {Cell(nr, nc)}.");
                         break;
                     }
                     nr += dr; nc += dc;
                 }
+                if (!connected) Log($"{Detail}The wave travels off the board without hitting anything.");
                 break;
             }
             case AbilityType.Freeze:
             {
-                var hit = new List<string>();
+                Log($"{N(piece)} casts <b>{ab.name}</b> on the area around {Cell(tr, tc)}!");
+                bool any = false;
                 for (int ddr=-1; ddr<=1; ddr++) for (int ddc=-1; ddc<=1; ddc++)
                 {
                     int nr=tr+ddr, nc=tc+ddc;
@@ -320,57 +340,76 @@ public class BoardManager : MonoBehaviour
                     var t=Board[nr,nc];
                     if (t!=null && t.player!=piece.player)
                     {
+                        any = true;
                         // Windborn: Zephyros immune to root
-                        if (t.key == "ZEPHYROS") { Log($"{t.pieceName}'s Windborn resists the root!"); continue; }
-                        t.rooted=true; t.rootedTurns=2; hit.Add(t.pieceName);
+                        if (t.key == "ZEPHYROS") { Log($"{Detail}{N(t)}'s Windborn resists the root!"); continue; }
+                        t.rooted=true; t.rootedTurns=2;
+                        Log($"{Detail}<color=#ffb347>{N(t)} at {Cell(nr, nc)} is rooted for 2 turns — it cannot move.</color>");
                     }
                 }
-                Log($"{piece.pieceName} uses {ab.name}! Rooted: {(hit.Count>0?string.Join(", ",hit):"none")}");
+                if (!any) Log($"{Detail}No enemies were caught in the area.");
                 break;
             }
             case AbilityType.Shockwave:
             {
                 int radius = piece.staticCharges > 0 ? piece.staticCharges : 1;
-                var hit = new List<string>();
+                Log($"{N(piece)} releases <b>Shockwave</b> — radius {radius} from {piece.staticCharges} Static Charge(s)!");
+                bool any = false;
                 for (int ddr=-radius; ddr<=radius; ddr++) for (int ddc=-radius; ddc<=radius; ddc++)
                 {
                     int nr=row+ddr, nc=col+ddc;
                     if (!InBounds(nr,nc)||(ddr==0&&ddc==0)) continue;
                     var t=Board[nr,nc];
-                    if (t!=null && t.player!=piece.player) { t.stunned=true; t.stunnedTurns=1; hit.Add(t.pieceName); }
+                    if (t!=null && t.player!=piece.player)
+                    {
+                        t.stunned=true; t.stunnedTurns=1; any = true;
+                        Log($"{Detail}<color=#ffb347>{N(t)} at {Cell(nr, nc)} is stunned for 1 turn — no moving, attacking, or casting.</color>");
+                    }
                 }
+                if (!any) Log($"{Detail}No enemies were caught in the blast.");
+                if (piece.staticCharges > 1) Log($"{Detail}Static Charges reset to 1.");
                 piece.staticCharges=1;
-                Log($"{piece.pieceName} releases Shockwave (radius {radius})! Stunned: {(hit.Count>0?string.Join(", ",hit):"none")}");
                 break;
             }
             case AbilityType.Fortress:
                 piece.fortress=true; piece.fortressTurns=2;
-                Log($"{piece.pieceName} activates Magnetic Fortress! Redirecting damage for 2 turns.");
+                Log($"{N(piece)} activates <b>Magnetic Fortress</b>!");
+                Log($"{Detail}<color=#6bd6e6>For 2 turns, attacks on allies within 2 tiles strike {N(piece)} instead.</color>");
                 break;
 
             case AbilityType.Barrier:
             {
                 var t=Board[tr,tc];
-                if (t!=null) { t.shielded=true; t.shieldTurns=2; Log($"{piece.pieceName} shields {t.pieceName} with Barrier!"); }
+                if (t!=null)
+                {
+                    t.shielded=true; t.shieldTurns=2;
+                    Log($"{N(piece)} casts <b>Barrier</b> on {N(t)} ({Cell(tr, tc)})!");
+                    Log($"{Detail}<color=#6bd6e6>The next hit within 2 turns is fully absorbed.</color>");
+                }
                 break;
             }
             case AbilityType.Heal:
             {
-                var healed=new List<string>();
+                Log($"{N(piece)} uses <b>{ab.name}</b>!");
+                bool any = false;
                 for (int ddr=-1; ddr<=1; ddr++) for (int ddc=-1; ddc<=1; ddc++)
                 {
                     int nr=row+ddr, nc=col+ddc;
                     if (!InBounds(nr,nc)) continue;
                     var t=Board[nr,nc];
                     if (t!=null && t.player==piece.player && t.shards<t.maxShards)
-                    { t.shards=Mathf.Min(t.shards+1,t.maxShards); healed.Add(t.pieceName); }
+                    {
+                        int before = t.shards;
+                        t.shards=Mathf.Min(t.shards+1,t.maxShards); any = true;
+                        Log($"{Detail}<color=#7dd87d>{N(t)} heals ({before} » {t.shards} shards).</color>");
+                    }
                 }
-                Log($"{piece.pieceName} uses {ab.name}! Healed: {(healed.Count>0?string.Join(", ",healed):"none")}");
+                if (!any) Log($"{Detail}No allies needed healing.");
                 break;
             }
             case AbilityType.Decoy:
                 Board[tr,tc]=PieceDefinitions.MakeDecoy(piece);
-                Log($"{piece.pieceName} conjures a Phantom Lantern!");
+                Log($"{N(piece)} conjures a <b>Phantom Lantern</b> at {Cell(tr, tc)} — a decoy to soak enemy attacks.");
                 break;
 
             case AbilityType.Pull:
@@ -383,7 +422,8 @@ public class BoardManager : MonoBehaviour
                     if (dist<=ab.range) inRange.Add((r,c,dist));
                 }
                 inRange.Sort((a,b)=>b.dist.CompareTo(a.dist));
-                var moved=new List<string>();
+                Log($"{N(piece)} casts <b>{ab.name}</b> — everything within {ab.range} tiles is dragged inward!");
+                bool anyPulled = false;
                 foreach (var (r,c,_) in inRange)
                 {
                     var t=Board[r,c]; if (t==null||t.key=="TOWER") continue; // towers don't budge
@@ -392,15 +432,21 @@ public class BoardManager : MonoBehaviour
                     if (InBounds(nr,nc)&&Board[nr,nc]==null)
                     {
                         Board[nr,nc]=t; Board[r,c]=null;
-                        if (t.player!=piece.player) { t.weakened=true; t.weakenedTurns=2; }
+                        anyPulled = true;
+                        Log($"{Detail}{N(t)} is pulled {Cell(r, c)} » {Cell(nr, nc)}.");
+                        if (t.player!=piece.player)
+                        {
+                            t.weakened=true; t.weakenedTurns=2;
+                            Log($"{Detail}<color=#ffb347>{N(t)} is weakened for 2 turns — its defensive passives are disabled.</color>");
+                        }
                         if (GameModeState.IsArena) OnArenaTileEntered(t, nr, nc, viaOwnMove: false);
-                        moved.Add(t.pieceName);
                     }
                 }
-                Log($"{piece.pieceName} uses Gravitic Distortion! Pulled: {(moved.Count>0?string.Join(", ",moved):"none")}");
+                if (!anyPulled) Log($"{Detail}Nothing was close enough (or free) to pull.");
                 break;
             }
         }
+        Log($"{Detail}<color=#88889c>{ab.name} is on cooldown for {ab.cooldown} turns.</color>");
         return true;
     }
 
@@ -408,29 +454,46 @@ public class BoardManager : MonoBehaviour
 
     // Central damage application. Returns true if target was killed.
     // isPhysical: true for regular attacks; false for ability/passive damage.
-    bool ApplyDamage(int tr, int tc, bool isPhysical, int killerPlayer)
+    // redirected: hit was pulled onto this target by Magnetic Fortress — it pierces
+    // physical immunity so Bulwark genuinely absorbs the damage he attracts.
+    bool ApplyDamage(int tr, int tc, bool isPhysical, Piece killer, int amount = 1, bool redirected = false)
     {
         var target = Board[tr, tc];
-        if (target == null) return false;
+        if (target == null || amount <= 0) return false;
+
+        // Weakened (Gravitic Distortion) switches off defensive passives:
+        // physical immunity, Ice Armor, and Energy Shield. Barrier still works.
+        bool passivesUp = !target.weakened;
+        if (target.weakened &&
+            (target.energyShieldActive ||
+             (isPhysical && (target.key == "BULWARK" || target.key == "SHARDIS" || target.key == "FROSTBITE"))))
+            Log($"{Detail}<color=#ffb347>Weakened — {N(target)}'s defensive passive is offline!</color>");
 
         // Physical immunity: Bulwark (Battle Hardened) and Shardis (Phased Form)
-        if (isPhysical && (target.key == "BULWARK" || target.key == "SHARDIS"))
+        if (isPhysical && passivesUp && !redirected &&
+            (target.key == "BULWARK" || target.key == "SHARDIS"))
         {
-            Log($"{target.pieceName} is immune to physical damage!");
+            string passive = target.key == "BULWARK" ? "Battle Hardened" : "Phased Form";
+            Log($"{Detail}<color=#6bd6e6>{passive} — {N(target)} is immune to physical damage. No effect.</color>");
             return false;
         }
 
-        // Ice Armor: Frostbite absorbs 1 physical damage
-        if (isPhysical && target.key == "FROSTBITE")
+        // Ice Armor: Frostbite reduces physical damage by 1
+        if (isPhysical && passivesUp && target.key == "FROSTBITE")
         {
-            Log($"{target.pieceName}'s Ice Armor absorbs the attack!");
-            return false;
+            amount -= 1;
+            if (amount <= 0)
+            {
+                Log($"{Detail}<color=#6bd6e6>Ice Armor blocks the hit — no damage gets through.</color>");
+                return false;
+            }
+            Log($"{Detail}<color=#6bd6e6>Ice Armor blocks 1 damage — {amount} gets through.</color>");
         }
 
         // Aegis personal Energy Shield (passive)
-        if (target.energyShieldActive)
+        if (passivesUp && target.energyShieldActive)
         {
-            Log($"{target.pieceName}'s Energy Shield absorbs the hit!");
+            Log($"{Detail}<color=#6bd6e6>{N(target)}'s Energy Shield shatters and absorbs the hit. It returns when Aegis lands a kill.</color>");
             target.energyShieldActive = false;
             return false;
         }
@@ -438,49 +501,41 @@ public class BoardManager : MonoBehaviour
         // Barrier (ability shield)
         if (target.shielded)
         {
-            Log($"{target.pieceName}'s barrier absorbs the hit!");
+            Log($"{Detail}<color=#6bd6e6>{N(target)}'s Barrier shatters and absorbs the hit.</color>");
             target.shielded = false; target.shieldTurns = 0;
             return false;
         }
 
         // Deal damage
-        target.shards -= 1;
+        int before = target.shards;
+        target.shards -= amount;
+        Log($"{Detail}{N(target)} takes <color=#ff6b6b>{amount} damage</color> ({before} » {Math.Max(target.shards, 0)} shards).");
 
         // Voltix: any damage resets static charges to 1
         if (target.key == "VOLTIX")
         {
+            if (target.staticCharges > 1)
+                Log($"{Detail}<color=#ffb347>{N(target)}'s Static Charge resets to 1.</color>");
             target.staticCharges = 1;
-            Log($"{target.pieceName}'s Static Charge has been reset!");
         }
-
-        Log($"{target.pieceName}: {target.shards + 1}→{target.shards} shards.");
 
         if (target.shards <= 0)
         {
-            Log($"{target.pieceName} has been destroyed!");
+            Log($"{Detail}<color=#ff6b6b><b>{target.pieceName} is destroyed!</b></color>");
             Board[tr, tc] = null;
             if (GameModeState.IsArena) OnArenaDeath(target, tr, tc);
             if (target.key == "MIMIC") RemoveMimicDecoy(target.id);
 
-            // Aegis Energy Shield regenerates when any friendly kills an enemy
-            if (killerPlayer != 0) RegenerateAegisShield(killerPlayer);
+            // Aegis Energy Shield regenerates only when Aegis itself lands the kill
+            if (killer != null && killer.key == "AEGIS" && !killer.energyShieldActive)
+            {
+                killer.energyShieldActive = true;
+                Log($"{Detail}<color=#6bd6e6>{N(killer)}'s Energy Shield regenerates from the kill!</color>");
+            }
 
             return true;
         }
         return false;
-    }
-
-    void RegenerateAegisShield(int player)
-    {
-        for (int r = 0; r < BS; r++) for (int c = 0; c < BS; c++)
-        {
-            var p = Board[r, c];
-            if (p != null && p.player == player && p.key == "AEGIS" && !p.energyShieldActive)
-            {
-                p.energyShieldActive = true;
-                Log($"Aegis's Energy Shield regenerates!");
-            }
-        }
     }
 
     void RemoveMimicDecoy(string mimicId)
@@ -492,7 +547,7 @@ public class BoardManager : MonoBehaviour
             if (p != null && p.isDecoy && p.decoyOwnerId == mimicId)
             {
                 Board[r, c] = null;
-                Log("Phantom Lantern fades as Mimic falls.");
+                Log($"{Detail}The Phantom Lantern at {Cell(r, c)} fades as Mimic falls.");
             }
         }
     }
@@ -524,12 +579,12 @@ public class BoardManager : MonoBehaviour
             var p = Board[r, c];
             if (p == null) continue; // may have been killed by Scorch mid-tick
 
-            if (p.abilityCd    > 0) { p.abilityCd--;    if (p.abilityCd == 0) Log($"{p.pieceName}: ability ready."); }
-            if (p.shieldTurns   > 0) { p.shieldTurns--;   if (p.shieldTurns   == 0) { p.shielded  = false; Log($"{p.pieceName}: barrier expired."); } }
-            if (p.rootedTurns   > 0) { p.rootedTurns--;   if (p.rootedTurns   == 0) { p.rooted    = false; Log($"{p.pieceName}: root cleared."); } }
-            if (p.stunnedTurns  > 0) { p.stunnedTurns--;  if (p.stunnedTurns  == 0) { p.stunned   = false; Log($"{p.pieceName}: stun cleared."); } }
-            if (p.weakenedTurns > 0) { p.weakenedTurns--; if (p.weakenedTurns == 0) { p.weakened  = false; Log($"{p.pieceName}: weaken cleared."); } }
-            if (p.fortressTurns > 0) { p.fortressTurns--; if (p.fortressTurns == 0) { p.fortress  = false; Log($"{p.pieceName}: fortress ended."); } }
+            if (p.abilityCd    > 0) { p.abilityCd--;    if (p.abilityCd == 0) Log($"{N(p)}'s {p.ability.name} is ready again."); }
+            if (p.shieldTurns   > 0) { p.shieldTurns--;   if (p.shieldTurns   == 0) { p.shielded  = false; Log($"{N(p)}'s Barrier fades unused."); } }
+            if (p.rootedTurns   > 0) { p.rootedTurns--;   if (p.rootedTurns   == 0) { p.rooted    = false; Log($"{N(p)} breaks free of the root and can move again."); } }
+            if (p.stunnedTurns  > 0) { p.stunnedTurns--;  if (p.stunnedTurns  == 0) { p.stunned   = false; Log($"{N(p)} recovers from the stun."); } }
+            if (p.weakenedTurns > 0) { p.weakenedTurns--; if (p.weakenedTurns == 0) { p.weakened  = false; Log($"{N(p)} is no longer weakened — defensive passives back online."); } }
+            if (p.fortressTurns > 0) { p.fortressTurns--; if (p.fortressTurns == 0) { p.fortress  = false; Log($"{N(p)}'s Magnetic Fortress powers down."); } }
 
             // Flare passive — Scorch: deal 1 damage to each adjacent enemy
             if (p.key == "FLARE")
@@ -542,8 +597,8 @@ public class BoardManager : MonoBehaviour
                     var enemy = Board[nr, nc];
                     if (enemy != null && enemy.player != player)
                     {
-                        Log($"Scorch singes {enemy.pieceName}!");
-                        ApplyDamage(nr, nc, isPhysical: false, killerPlayer: player);
+                        Log($"{N(p)}'s Scorch singes {N(enemy)} at {Cell(nr, nc)}!");
+                        ApplyDamage(nr, nc, isPhysical: false, killer: p);
                     }
                 }
             }
@@ -560,7 +615,7 @@ public class BoardManager : MonoBehaviour
                     if (ally != null && ally.player == player && ally.shards < ally.maxShards)
                     {
                         ally.shards++;
-                        Log($"Life Bloom heals {ally.pieceName}.");
+                        Log($"<color=#7dd87d>{N(p)}'s Life Bloom heals {N(ally)} ({ally.shards - 1} » {ally.shards} shards).</color>");
                     }
                 }
             }
@@ -643,7 +698,7 @@ public class BoardManager : MonoBehaviour
         {
             BallLoose = false;
             piece.hasBall = true;
-            Log($"{piece.pieceName} picks up the ball!");
+            Log($"{N(piece)} picks up the ball at {Cell(r, c)}! (Move -{ArenaConfig.CarrierMovePenalty} while carrying.)");
         }
 
         if (viaOwnMove && piece.hasBall && IsGoalTile(piece.player, r, c) && IsGoalOpen(piece.player, r, c))
@@ -654,7 +709,7 @@ public class BoardManager : MonoBehaviour
     {
         if (scorer.player == 1) GoalsP1++; else GoalsP2++;
         scorer.hasBall = false;
-        Log($"<b>GOAL!</b> {scorer.pieceName} scores! ({GoalsP1}–{GoalsP2})");
+        Log($"<color=#ffd24d><b>GOAL!</b></color> {N(scorer)} carries the ball into the goal! Score: {GoalsP1}–{GoalsP2} (first to {ArenaConfig.GoalsToWin}).");
         SpawnBall(ArenaConfig.BallSpawnRow, ArenaConfig.BallSpawnCol);
         OnGoalScored?.Invoke();
     }
@@ -679,11 +734,11 @@ public class BoardManager : MonoBehaviour
         {
             target.hasBall = false;
             BallLoose = true; BallR = tr; BallC = tc;
-            Log($"{target.pieceName} drops the ball!");
+            Log($"{Detail}{N(target)} drops the ball at {Cell(tr, tc)} — it's loose for anyone to grab.");
         }
 
         if (target.key == "TOWER")
-            Log("The fallen tower no longer blocks its outer goal tile!");
+            Log($"{Detail}The fallen tower no longer guards its outer goal tile!");
         else if (!target.isDecoy && homeTiles.TryGetValue(target.id, out var home))
             respawns.Add(new RespawnEntry { piece = target, turnsLeft = ArenaConfig.RespawnTurns, homeR = home.r, homeC = home.c });
     }
@@ -713,9 +768,8 @@ public class BoardManager : MonoBehaviour
             if (target == null) continue;
 
             OnAttackVfx?.Invoke(r, c, target.Value.r, target.Value.c);
-            Log($"{tower.pieceName} volley hits {Board[target.Value.r, target.Value.c].pieceName}!");
-            for (int i = 0; i < ArenaConfig.TowerDamage; i++)
-                if (ApplyDamage(target.Value.r, target.Value.c, isPhysical: false, killerPlayer: player)) break;
+            Log($"{N(tower)} fires a volley at {N(Board[target.Value.r, target.Value.c])} ({Cell(target.Value.r, target.Value.c)})!");
+            ApplyDamage(target.Value.r, target.Value.c, isPhysical: false, killer: tower, amount: tower.dmg);
         }
     }
 
@@ -726,7 +780,7 @@ public class BoardManager : MonoBehaviour
             var e = respawns[i];
             if (e.piece.player != player) continue;
             e.turnsLeft--;
-            if (e.turnsLeft > 0) { Log($"{e.piece.pieceName} respawns in {e.turnsLeft} turn(s)."); continue; }
+            if (e.turnsLeft > 0) { Log($"{N(e.piece)} respawns in {e.turnsLeft} turn(s)."); continue; }
 
             var spot = FindRespawnTile(e.homeR, e.homeC);
             if (spot == null) { e.turnsLeft = 1; continue; } // board jammed — try again next turn
@@ -734,7 +788,7 @@ public class BoardManager : MonoBehaviour
             RevivePiece(e.piece);
             Board[spot.Value.r, spot.Value.c] = e.piece;
             respawns.RemoveAt(i);
-            Log($"{e.piece.pieceName} respawns!");
+            Log($"{N(e.piece)} respawns at {Cell(spot.Value.r, spot.Value.c)} at full strength!");
         }
     }
 
@@ -767,4 +821,17 @@ public class BoardManager : MonoBehaviour
     }
 
     void Log(string msg) => OnLog?.Invoke(msg);
+
+    // ── Log formatting ────────────────────────────────────────────────────────
+
+    // Cells log as chess-style coordinates: columns a–h, ranks 8 (top) down to 1
+    public static string Cell(int r, int c) => $"{(char)('a' + c)}{BS - r}";
+
+    // Piece names tinted by owner — gold for the player, blue for the AI
+    static string N(Piece p) => p == null ? "?"
+        : p.player == 1 ? $"<color=#ffd24d>{p.pieceName}</color>"
+        :                 $"<color=#7fb8e6>{p.pieceName}</color>";
+
+    // Indented continuation line: consequences of the action logged above it
+    const string Detail = "   <color=#88889c>·</color> ";
 }

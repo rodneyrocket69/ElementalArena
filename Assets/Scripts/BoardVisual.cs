@@ -45,6 +45,11 @@ public class BoardVisual : MonoBehaviour
     static readonly Color WeakenTint  = new(1.00f, 0.50f, 0.10f);
     static readonly Color FortressTint= new(0.55f, 0.55f, 0.55f);
 
+    // Shield visuals — cyan for Barrier (matches the log color), violet for
+    // Aegis's Energy Shield so the two absorb effects read differently
+    static readonly Color BarrierCol  = new(0.42f, 0.84f, 0.90f);
+    static readonly Color EnergyCol   = new(0.72f, 0.45f, 1.00f);
+
     // ── scene objects ─────────────────────────────────────────────────────────
     BoardManager board;
     GameObject[,] tiles;
@@ -746,8 +751,39 @@ public class BoardVisual : MonoBehaviour
                 pip.transform.localScale    = new Vector3(0.10f, 0.10f, 0.10f);
                 pip.transform.localPosition = new Vector3(i * 0.16f - totalW * 0.5f, pieceRadius * 2f + 0.22f, 0);
             }
+
+            // Shield visuals (hidden until a shield is active).
+            // NOTE: added AFTER the shard pips — RefreshPips addresses pips by
+            // child index 1..maxShards, so these must come later in the hierarchy.
+
+            // Translucent bubble surrounding the body
+            view.shieldBubble = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            view.shieldBubble.name = "ShieldBubble";
+            Destroy(view.shieldBubble.GetComponent<SphereCollider>());
+            view.shieldBubble.transform.SetParent(root.transform, false);
+            view.shieldBubble.transform.localPosition = new Vector3(0, pieceRadius, 0);
+            view.bubbleBaseScale = Vector3.one * 0.92f;
+            view.shieldBubble.transform.localScale = view.bubbleBaseScale;
+            view.shieldBubble.SetActive(false);
+
+            // One pip per shield type, flanking the shard row: they read as
+            // "extra hit points" sitting next to the piece's health
+            view.barrierPip = MakeShieldPip(root.transform,  totalW * 0.5f + 0.22f);
+            view.energyPip  = MakeShieldPip(root.transform, -totalW * 0.5f - 0.22f);
         }
         return view;
+    }
+
+    GameObject MakeShieldPip(Transform root, float x)
+    {
+        var pip = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        pip.name = "ShieldPip";
+        Destroy(pip.GetComponent<SphereCollider>());
+        pip.transform.SetParent(root, false);
+        pip.transform.localScale    = new Vector3(0.13f, 0.13f, 0.13f); // a hair larger than shard pips
+        pip.transform.localPosition = new Vector3(x, pieceRadius * 2f + 0.22f, 0);
+        pip.SetActive(false);
+        return pip;
     }
 
     // Each elemental gets its own silhouette so pieces are readable at a glance
@@ -824,6 +860,32 @@ public class BoardVisual : MonoBehaviour
         // (Stop there — the carried ball parents itself after the pips.)
         for (int i = 1; i <= piece.maxShards && i < view.transform.childCount; i++)
             SetColor(view.transform.GetChild(i).gameObject, (i - 1) < piece.shards ? full : empty);
+
+        RefreshShields(view, piece);
+    }
+
+    // Bubble around the piece + a pip beside the shard row for each active
+    // shield: cyan = Barrier (ability), violet = Aegis Energy Shield (passive)
+    void RefreshShields(PieceView view, Piece piece)
+    {
+        if (view.shieldBubble == null) return;
+
+        bool barrier = piece.shielded;
+        bool energy  = piece.energyShieldActive && !piece.weakened; // weakened switches the passive off
+
+        view.shieldBubble.SetActive(barrier || energy);
+        if (barrier || energy)
+        {
+            // Barrier absorbs first in ApplyDamage, so it wins the bubble color
+            Color c = barrier ? BarrierCol : EnergyCol;
+            FlatKitMaterials.TintTransparent(view.shieldBubble, new Color(c.r, c.g, c.b, 0.30f));
+        }
+
+        view.barrierPip.SetActive(barrier);
+        if (barrier) SetColor(view.barrierPip, BarrierCol);
+
+        view.energyPip.SetActive(energy);
+        if (energy) SetColor(view.energyPip, EnergyCol);
     }
 
     // ── events ────────────────────────────────────────────────────────────────
@@ -863,10 +925,10 @@ public class BoardVisual : MonoBehaviour
             "Support" => Color.Lerp(col, new Color(0.7f, 1f, 0.7f), 0.25f),
             _         => col
         };
-        // Status blends on the piece itself
+        // Status blends on the piece itself.
+        // (Shields deliberately absent — the bubble + shield pip show those.)
         if (p.stunned)  col = Color.Lerp(col, Color.yellow, 0.50f);
         if (p.rooted)   col = Color.Lerp(col, Color.green,  0.40f);
-        if (p.shielded || p.energyShieldActive) col = Color.Lerp(col, new Color(0.7f, 0.4f, 1f), 0.45f);
         if (p.weakened) col = Color.Lerp(col, new Color(1f, 0.5f, 0f), 0.35f);
         if (p.fortress) col = Color.Lerp(col, Color.gray, 0.45f);
         return col;

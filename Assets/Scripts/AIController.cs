@@ -38,7 +38,7 @@ public class AIController : MonoBehaviour
             if (boardManager.CheckWinner() != 0) break;
 
             var action = FindBestAction();
-            if (action == null) { Log("[AI] Nothing useful to do."); break; }
+            if (action == null) { Log("The AI passes — it found nothing useful to do."); break; }
 
             Execute(action);
             if (boardVisual != null) boardVisual.RefreshAll(); // show each action as it happens
@@ -101,8 +101,8 @@ public class AIController : MonoBehaviour
     // How valuable is landing one hit on this target? 0 = pointless, skip it.
     float HitValue(Piece t, bool isPhysical)
     {
-        if (isPhysical && (t.key == "BULWARK" || t.key == "SHARDIS" || t.key == "FROSTBITE"))
-            return 0f;                                    // immune/absorbed — wasted action
+        if (isPhysical && !t.weakened && (t.key == "BULWARK" || t.key == "SHARDIS" || t.key == "FROSTBITE"))
+            return 0f;                                    // immune/absorbed — wasted action (weaken disables these)
         if (t.hasBall) return 20f;                        // stop the carrier above all else
         if (t.isDecoy) return 2f;                         // pop the phantom
         if (t.energyShieldActive || t.shielded) return 2f;// burns a shield, no damage yet
