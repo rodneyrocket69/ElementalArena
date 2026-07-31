@@ -1,31 +1,27 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// ALL Arena Ball tuning numbers live here. Change these to balance the mode.
+// Facade over the one tuning object. All Arena Ball numbers now live on the
+// GameParameters asset (Game.Params.arena) and are editable in the Inspector —
+// live during Play mode. These forwarding properties keep every existing
+// ArenaConfig.X call site working unchanged.
 // Nothing in Classic mode reads this file.
 // ─────────────────────────────────────────────────────────────────────────────
 public static class ArenaConfig
 {
     // ── Towers ──
-    public static int TowerHP           = 5;  // health of each corner tower
-    public static int TowerDamage       = 1;  // damage per defense volley
-    public static int TowerDefenseRange = 2;  // tiles (Chebyshev) a tower can shoot
+    public static int TowerHP           => Game.Params.arena.towerHP;
+    public static int TowerDamage       => Game.Params.arena.towerDamage;
+    public static int TowerDefenseRange => Game.Params.arena.towerDefenseRange;
 
     // ── Scoring ──
-    public static int GoalsToWin = 2;         // first team to this many goals wins
-
-    // Goal zone: columns on each back row that count as goal tiles.
-    // Cols 2..5 = 4 tiles wide, centered on the 8-wide board.
-    // The outer tile on each side is blocked while the tower in that corner
-    // is standing; the two center tiles are always open.
-    public static int GoalZoneMinCol = 2;
-    public static int GoalZoneMaxCol = 5;
+    public static int GoalsToWin     => Game.Params.arena.goalsToWin;
+    public static int GoalZoneMinCol => Game.Params.arena.goalZoneMinCol;
+    public static int GoalZoneMaxCol => Game.Params.arena.goalZoneMaxCol;
 
     // ── Ball ──
-    public static int CarrierMovePenalty = 1; // move range lost while carrying
-
-    // Where the ball starts, and where it returns after each goal.
-    public static int BallSpawnRow = 3;
-    public static int BallSpawnCol = 4;
+    public static int CarrierMovePenalty => Game.Params.arena.carrierMovePenalty;
+    public static int BallSpawnRow       => Game.Params.arena.ballSpawnRow;
+    public static int BallSpawnCol       => Game.Params.arena.ballSpawnCol;
 
     // ── Respawns ──
-    public static int RespawnTurns = 2;       // owner-turns a destroyed piece waits
+    public static int RespawnTurns => Game.Params.arena.respawnTurns;
 }

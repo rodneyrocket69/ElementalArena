@@ -108,8 +108,9 @@ public class BoardManager : MonoBehaviour
         var piece = Board[row, col];
         var result = new List<(int, int)>();
         if (piece == null || piece.stunned || piece.isDecoy || piece.key == "TOWER") return result;
-        for (int dr = -1; dr <= 1; dr++)
-        for (int dc = -1; dc <= 1; dc++)
+        int range = CombatConfig.AttackRange;
+        for (int dr = -range; dr <= range; dr++)
+        for (int dc = -range; dc <= range; dc++)
         {
             if (dr == 0 && dc == 0) continue;
             int nr = row + dr, nc = col + dc;
@@ -214,7 +215,8 @@ public class BoardManager : MonoBehaviour
                 break;
 
             case AbilityType.Fortress:
-                for (int ddr=-2; ddr<=2; ddr++) for (int ddc=-2; ddc<=2; ddc++)
+                int fr = CombatConfig.FortressRedirectRange;
+                for (int ddr=-fr; ddr<=fr; ddr++) for (int ddc=-fr; ddc<=fr; ddc++)
                 { int nr=row+ddr, nc=col+ddc; if (InBounds(nr,nc)&&!(ddr==0&&ddc==0)) aoe.Add((nr,nc)); }
                 break;
 
@@ -244,10 +246,10 @@ public class BoardManager : MonoBehaviour
 
         Log($"{N(piece)} moves {Cell(row, col)} » {Cell(nr, nc)}.");
 
-        if (piece.key == "VOLTIX" && piece.staticCharges < 3)
+        if (piece.key == "VOLTIX" && piece.staticCharges < CombatConfig.VoltixMaxCharges)
         {
             piece.staticCharges++;
-            Log($"{Detail}<color=#ffb347>Static Charge builds: {piece.staticCharges}/3.</color>");
+            Log($"{Detail}<color=#ffb347>Static Charge builds: {piece.staticCharges}/{CombatConfig.VoltixMaxCharges}.</color>");
         }
 
         if (GameModeState.IsArena) OnArenaTileEntered(piece, nr, nc, viaOwnMove: true);
@@ -266,7 +268,7 @@ public class BoardManager : MonoBehaviour
         {
             var p = Board[r, c];
             if (p != null && p.player == Board[tr, tc].player && p.fortress &&
-                Cheb(r, c, tr, tc) <= 2 && !(r == tr && c == tc))
+                Cheb(r, c, tr, tc) <= CombatConfig.FortressRedirectRange && !(r == tr && c == tc))
             {
                 ar = r; ac = c;
                 break;
@@ -344,8 +346,8 @@ public class BoardManager : MonoBehaviour
                         any = true;
                         // Windborn: Zephyros immune to root
                         if (t.key == "ZEPHYROS") { Log($"{Detail}{N(t)}'s Windborn resists the root!"); continue; }
-                        t.rooted=true; t.rootedTurns=2;
-                        Log($"{Detail}<color=#ffb347>{N(t)} at {Cell(nr, nc)} is rooted for 2 turns — it cannot move.</color>");
+                        t.rooted=true; t.rootedTurns=CombatConfig.RootTurns;
+                        Log($"{Detail}<color=#ffb347>{N(t)} at {Cell(nr, nc)} is rooted for {CombatConfig.RootTurns} turns — it cannot move.</color>");
                     }
                 }
                 if (!any) Log($"{Detail}No enemies were caught in the area.");
@@ -363,8 +365,8 @@ public class BoardManager : MonoBehaviour
                     var t=Board[nr,nc];
                     if (t!=null && t.player!=piece.player)
                     {
-                        t.stunned=true; t.stunnedTurns=1; any = true;
-                        Log($"{Detail}<color=#ffb347>{N(t)} at {Cell(nr, nc)} is stunned for 1 turn — no moving, attacking, or casting.</color>");
+                        t.stunned=true; t.stunnedTurns=CombatConfig.StunTurns; any = true;
+                        Log($"{Detail}<color=#ffb347>{N(t)} at {Cell(nr, nc)} is stunned for {CombatConfig.StunTurns} turn(s) — no moving, attacking, or casting.</color>");
                     }
                 }
                 if (!any) Log($"{Detail}No enemies were caught in the blast.");
@@ -373,9 +375,9 @@ public class BoardManager : MonoBehaviour
                 break;
             }
             case AbilityType.Fortress:
-                piece.fortress=true; piece.fortressTurns=2;
+                piece.fortress=true; piece.fortressTurns=CombatConfig.FortressTurns;
                 Log($"{N(piece)} activates <b>Magnetic Fortress</b>!");
-                Log($"{Detail}<color=#6bd6e6>For 2 turns, attacks on allies within 2 tiles strike {N(piece)} instead.</color>");
+                Log($"{Detail}<color=#6bd6e6>For {CombatConfig.FortressTurns} turns, attacks on allies within {CombatConfig.FortressRedirectRange} tiles strike {N(piece)} instead.</color>");
                 break;
 
             case AbilityType.Barrier:
@@ -383,9 +385,9 @@ public class BoardManager : MonoBehaviour
                 var t=Board[tr,tc];
                 if (t!=null)
                 {
-                    t.shielded=true; t.shieldTurns=2;
+                    t.shielded=true; t.shieldTurns=CombatConfig.BarrierTurns;
                     Log($"{N(piece)} casts <b>Barrier</b> on {N(t)} ({Cell(tr, tc)})!");
-                    Log($"{Detail}<color=#6bd6e6>The next hit within 2 turns is fully absorbed.</color>");
+                    Log($"{Detail}<color=#6bd6e6>The next hit within {CombatConfig.BarrierTurns} turns is fully absorbed.</color>");
                 }
                 break;
             }
@@ -401,7 +403,7 @@ public class BoardManager : MonoBehaviour
                     if (t!=null && t.player==piece.player && t.shards<t.maxShards)
                     {
                         int before = t.shards;
-                        t.shards=Mathf.Min(t.shards+1,t.maxShards); any = true;
+                        t.shards=Mathf.Min(t.shards+CombatConfig.HealAmount,t.maxShards); any = true;
                         Log($"{Detail}<color=#7dd87d>{N(t)} heals ({before} » {t.shards} shards).</color>");
                     }
                 }
@@ -437,8 +439,8 @@ public class BoardManager : MonoBehaviour
                         Log($"{Detail}{N(t)} is pulled {Cell(r, c)} » {Cell(nr, nc)}.");
                         if (t.player!=piece.player)
                         {
-                            t.weakened=true; t.weakenedTurns=2;
-                            Log($"{Detail}<color=#ffb347>{N(t)} is weakened for 2 turns — its defensive passives are disabled.</color>");
+                            t.weakened=true; t.weakenedTurns=CombatConfig.WeakenTurns;
+                            Log($"{Detail}<color=#ffb347>{N(t)} is weakened for {CombatConfig.WeakenTurns} turns — its defensive passives are disabled.</color>");
                         }
                         if (GameModeState.IsArena) OnArenaTileEntered(t, nr, nc, viaOwnMove: false);
                     }
@@ -467,28 +469,27 @@ public class BoardManager : MonoBehaviour
         bool passivesUp = !target.weakened;
         if (target.weakened &&
             (target.energyShieldActive ||
-             (isPhysical && (target.key == "BULWARK" || target.key == "SHARDIS" || target.key == "FROSTBITE"))))
+             (isPhysical && (target.key == "BULWARK" || target.key == "FROSTBITE"))))
             Log($"{Detail}<color=#ffb347>Weakened — {N(target)}'s defensive passive is offline!</color>");
 
-        // Physical immunity: Bulwark (Battle Hardened) and Shardis (Phased Form)
-        if (isPhysical && passivesUp && !redirected &&
-            (target.key == "BULWARK" || target.key == "SHARDIS"))
+        // Physical immunity: Bulwark (Battle Hardened)
+        if (isPhysical && passivesUp && !redirected && target.key == "BULWARK")
         {
-            string passive = target.key == "BULWARK" ? "Battle Hardened" : "Phased Form";
-            Log($"{Detail}<color=#6bd6e6>{passive} — {N(target)} is immune to physical damage. No effect.</color>");
+            Log($"{Detail}<color=#6bd6e6>Battle Hardened — {N(target)} is immune to physical damage. No effect.</color>");
             return false;
         }
 
         // Ice Armor: Frostbite reduces physical damage by 1
         if (isPhysical && passivesUp && target.key == "FROSTBITE")
         {
-            amount -= 1;
+            int blocked = CombatConfig.IceArmorReduction;
+            amount -= blocked;
             if (amount <= 0)
             {
                 Log($"{Detail}<color=#6bd6e6>Ice Armor blocks the hit — no damage gets through.</color>");
                 return false;
             }
-            Log($"{Detail}<color=#6bd6e6>Ice Armor blocks 1 damage — {amount} gets through.</color>");
+            Log($"{Detail}<color=#6bd6e6>Ice Armor blocks {blocked} damage — {amount} gets through.</color>");
         }
 
         // Aegis personal Energy Shield (passive)
@@ -600,7 +601,7 @@ public class BoardManager : MonoBehaviour
                     if (enemy != null && enemy.player != player)
                     {
                         Log($"{N(p)}'s Scorch singes {N(enemy)} at {Cell(nr, nc)}!");
-                        ApplyDamage(nr, nc, isPhysical: false, killer: p);
+                        ApplyDamage(nr, nc, isPhysical: false, killer: p, amount: CombatConfig.ScorchDamage);
                     }
                 }
             }
@@ -616,8 +617,9 @@ public class BoardManager : MonoBehaviour
                     var ally = Board[nr, nc];
                     if (ally != null && ally.player == player && ally.shards < ally.maxShards)
                     {
-                        ally.shards++;
-                        Log($"<color=#7dd87d>{N(p)}'s Life Bloom heals {N(ally)} ({ally.shards - 1} » {ally.shards} shards).</color>");
+                        int before = ally.shards;
+                        ally.shards = Mathf.Min(ally.shards + CombatConfig.LifeBloomHeal, ally.maxShards);
+                        Log($"<color=#7dd87d>{N(p)}'s Life Bloom heals {N(ally)} ({before} » {ally.shards} shards).</color>");
                     }
                 }
             }

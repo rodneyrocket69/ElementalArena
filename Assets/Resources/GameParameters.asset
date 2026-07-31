@@ -1,0 +1,106 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44c301da37ed1da4b82002a8c83ac856, type: 3}
+  m_Name: GameParameters
+  m_EditorClassIdentifier:
+  combat:
+    actionsPerTurn: 2
+    attackRange: 1
+    rootTurns: 2
+    stunTurns: 1
+    fortressTurns: 2
+    barrierTurns: 2
+    weakenTurns: 2
+    iceArmorReduction: 1
+    scorchDamage: 1
+    lifeBloomHeal: 1
+    healAmount: 1
+    voltixMaxCharges: 3
+    fortressRedirectRange: 2
+  arena:
+    towerHP: 5
+    towerDamage: 1
+    towerDefenseRange: 2
+    goalsToWin: 2
+    goalZoneMinCol: 2
+    goalZoneMaxCol: 5
+    carrierMovePenalty: 1
+    ballSpawnRow: 3
+    ballSpawnCol: 4
+    respawnTurns: 2
+  ai:
+    thinkDelay: 0.9
+    actionDelay: 0.6
+  pieces:
+  - key: FLARE
+    displayName: Flare
+    maxShards: 2
+    move: 4
+    dmg: 1
+    abilityRange: 2
+    abilityCooldown: 2
+  - key: VOLTIX
+    displayName: Voltix
+    maxShards: 2
+    move: 2
+    dmg: 1
+    abilityRange: 0
+    abilityCooldown: 3
+  - key: ZEPHYROS
+    displayName: Zephyros
+    maxShards: 2
+    move: 3
+    dmg: 1
+    abilityRange: 7
+    abilityCooldown: 3
+  - key: FROSTBITE
+    displayName: Frostbite
+    maxShards: 4
+    move: 2
+    dmg: 1
+    abilityRange: 2
+    abilityCooldown: 4
+  - key: BULWARK
+    displayName: Bulwark
+    maxShards: 4
+    move: 2
+    dmg: 1
+    abilityRange: 0
+    abilityCooldown: 3
+  - key: AEGIS
+    displayName: Aegis
+    maxShards: 4
+    move: 3
+    dmg: 1
+    abilityRange: 3
+    abilityCooldown: 3
+  - key: VERDANT
+    displayName: Verdant
+    maxShards: 3
+    move: 2
+    dmg: 1
+    abilityRange: 2
+    abilityCooldown: 3
+  - key: MIMIC
+    displayName: Mimic
+    maxShards: 3
+    move: 3
+    dmg: 1
+    abilityRange: 1
+    abilityCooldown: 4
+  - key: SHARDIS
+    displayName: Shardis
+    maxShards: 3
+    move: 2
+    dmg: 1
+    abilityRange: 3
+    abilityCooldown: 5

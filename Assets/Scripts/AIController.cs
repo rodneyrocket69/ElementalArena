@@ -6,11 +6,8 @@ public class AIController : MonoBehaviour
     public BoardManager boardManager;
     public TurnManager  turnManager;
 
-    [Tooltip("Seconds before AI acts (for feel)")]
-    public float thinkDelay = 0.9f;
-
-    [Tooltip("Seconds between the AI's two actions")]
-    public float actionDelay = 0.6f;
+    // AI pacing now lives on the GameParameters asset (Game.Params.ai) so every
+    // tunable sits in one place — edit thinkDelay / actionDelay in the Inspector.
 
     BoardVisual boardVisual; // found automatically so no scene wiring is needed
 
@@ -31,7 +28,7 @@ public class AIController : MonoBehaviour
 
     IEnumerator RunAITurn()
     {
-        yield return new WaitForSeconds(thinkDelay);
+        yield return new WaitForSeconds(Game.Params.ai.thinkDelay);
 
         for (int ap = 0; ap < 2; ap++)
         {
@@ -42,7 +39,7 @@ public class AIController : MonoBehaviour
 
             Execute(action);
             if (boardVisual != null) boardVisual.RefreshAll(); // show each action as it happens
-            yield return new WaitForSeconds(actionDelay);
+            yield return new WaitForSeconds(Game.Params.ai.actionDelay);
         }
 
         turnManager.EndAITurn();
@@ -101,7 +98,7 @@ public class AIController : MonoBehaviour
     // How valuable is landing one hit on this target? 0 = pointless, skip it.
     float HitValue(Piece t, bool isPhysical)
     {
-        if (isPhysical && !t.weakened && (t.key == "BULWARK" || t.key == "SHARDIS" || t.key == "FROSTBITE"))
+        if (isPhysical && !t.weakened && (t.key == "BULWARK" || t.key == "FROSTBITE"))
             return 0f;                                    // immune/absorbed — wasted action (weaken disables these)
         if (t.hasBall) return 20f;                        // stop the carrier above all else
         if (t.isDecoy) return 2f;                         // pop the phantom

@@ -231,7 +231,7 @@ public class OverlayUI : MonoBehaviour
             "AEGIS"     => "\nPassive: Energy Shield (regens on own kills)",
             "VERDANT"   => "\nPassive: Life Bloom",
             "MIMIC"     => "\nPassive: Eerie Aura",
-            "SHARDIS"   => "\nPassive: Phased Form (phys immune; off while weakened)",
+            "SHARDIS"   => "\nPassive: none",
             "TOWER"     => "\nPassive: Sentry (auto-fires each turn)",
             _           => ""
         };

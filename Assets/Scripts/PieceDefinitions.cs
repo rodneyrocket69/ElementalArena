@@ -53,7 +53,7 @@ public static class PieceDefinitions
         },
         ["SHARDIS"] = new Piece {
             key="SHARDIS", pieceName="Shardis", cls="Support", maxShards=3, move=2, dmg=1,
-            // Passive: Phased Form — immune to physical (attack) damage (disabled while weakened)
+            // No defensive passive — Shardis takes normal physical damage.
             ability=new AbilityDef { name="Gravitic Distortion", desc="Pull all pieces within 3 tiles 1 step toward Shardis. Enemies weakened for 2 turns — weakened pieces lose their defensive passives.", range=3, cooldown=5, type=AbilityType.Pull }
         },
     };
@@ -64,7 +64,22 @@ public static class PieceDefinitions
         var p = def.Clone();
         p.id     = id;
         p.player = player;
-        p.shards = def.maxShards;
+
+        // Overlay live numeric stats from the tuning asset (Inspector-editable).
+        // Names, descriptions, ability types, and passives stay defined above.
+        var tuning = Game.Params.GetPiece(key);
+        if (tuning != null)
+        {
+            p.maxShards = tuning.maxShards;
+            p.move      = tuning.move;
+            p.dmg       = tuning.dmg;
+            var ab = p.ability;
+            ab.range    = tuning.abilityRange;
+            ab.cooldown = tuning.abilityCooldown;
+            p.ability   = ab;
+        }
+
+        p.shards = p.maxShards;
         p.abilityCd = 0;
         p.isDecoy = false;
         p.staticCharges = key == "VOLTIX" ? 1 : 0;

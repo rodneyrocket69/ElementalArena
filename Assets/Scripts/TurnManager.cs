@@ -25,6 +25,7 @@ public class TurnManager : MonoBehaviour
 
     void Awake()
     {
+        AP = CombatConfig.ActionsPerTurn;
         boardManager.OnLog += msg => OnLog?.Invoke(msg);
 
         // Arena: a goal can end the game mid-turn — don't wait for the turn to end
@@ -73,7 +74,7 @@ public class TurnManager : MonoBehaviour
         w = boardManager.CheckWinner();
         if (w != 0) { TriggerGameOver(w); return; }
 
-        AP = 2;
+        AP = CombatConfig.ActionsPerTurn;
         TurnNumber++;
         OnAPChanged?.Invoke(AP);
         SetPhase(GamePhase.Player);
@@ -98,7 +99,7 @@ public class TurnManager : MonoBehaviour
     public void ResetGame()
     {
         boardManager.InitBoard();
-        AP = 2; Winner = 0; TurnNumber = 1;
+        AP = CombatConfig.ActionsPerTurn; Winner = 0; TurnNumber = 1;
         OnAPChanged?.Invoke(AP);
         SetPhase(GamePhase.Player);
         Log(string.Format(PlayerHeaderFmt, TurnNumber));
