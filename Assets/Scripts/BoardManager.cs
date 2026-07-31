@@ -14,6 +14,7 @@ public class BoardManager : MonoBehaviour
     // Both fire BEFORE damage/effects apply, so listeners can read the pre-hit board.
     public event Action<int, int, int, int> OnAttackVfx;               // attacker r,c → damaged target r,c
     public event Action<int, int, int, int, AbilityType> OnAbilityVfx; // caster r,c → target tile
+    public event Action<int, int, int> OnDamageTaken;                  // target r,c, amount — fires only when shards are actually lost
 
     // ── Arena mode state ──────────────────────────────────────────────────────
     public int  GoalsP1   { get; private set; }
@@ -510,6 +511,7 @@ public class BoardManager : MonoBehaviour
         int before = target.shards;
         target.shards -= amount;
         Log($"{Detail}{N(target)} takes <color=#ff6b6b>{amount} damage</color> ({before} » {Math.Max(target.shards, 0)} shards).");
+        OnDamageTaken?.Invoke(tr, tc, amount);
 
         // Voltix: any damage resets static charges to 1
         if (target.key == "VOLTIX")

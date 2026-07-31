@@ -10,6 +10,20 @@ public class AbilityVFX : MonoBehaviour
 {
     BoardManager board;
     BoardVisual  visual;
+    CameraController shakeCam;
+
+    // The player-authored on-hit flipbook, loaded from Resources/OnHit and
+    // ordered by frame name (Untitled_Artwork-1 … -6). Cached across the session.
+    static Sprite[] hitFrames;
+    static Sprite[] HitFrames => hitFrames != null ? hitFrames : (hitFrames = LoadHitFrames());
+
+    static Sprite[] LoadHitFrames()
+    {
+        var s = Resources.LoadAll<Sprite>("OnHit");
+        System.Array.Sort(s, (a, b) => string.CompareOrdinal(a.name, b.name));
+        if (s.Length == 0) Debug.LogWarning("AbilityVFX: no on-hit sprites found in Resources/OnHit");
+        return s;
+    }
 
     static readonly Color AttackCol   = new(1.00f, 0.35f, 0.25f); // melee hit
     static readonly Color FireCol     = new(1.00f, 0.55f, 0.15f); // Inferno Burst
@@ -30,17 +44,28 @@ public class AbilityVFX : MonoBehaviour
 
     void Start()
     {
-        board.OnAttackVfx  += PlayAttack;
-        board.OnAbilityVfx += PlayAbility;
+        board.OnAttackVfx   += PlayAttack;
+        board.OnAbilityVfx  += PlayAbility;
+        board.OnDamageTaken += OnDamage;
     }
 
     Vector3 Tile(int r, int c, float height) => visual.WorldPos(r, c, height);
 
     void PlayAttack(int r, int c, int tr, int tc)
     {
-        // Trail from attacker to victim, plus a burst on the victim
+        // Trail from attacker to victim, then the player-drawn on-hit flipbook
+        // bursts on the victim in place of the old primitive impact pop.
         StartCoroutine(Beam(Tile(r, c, 0.45f), Tile(tr, tc, 0.45f), AttackCol));
-        StartCoroutine(ImpactPop(Tile(tr, tc, 0.45f), AttackCol, 0.55f));
+        StartCoroutine(HitFlipbook(Tile(tr, tc, 0.6f)));
+    }
+
+    // Camera kick whenever a piece actually loses shards (any damage source).
+    void OnDamage(int r, int c, int amount)
+    {
+        if (shakeCam == null && Camera.main != null)
+            shakeCam = Camera.main.GetComponent<CameraController>();
+        // Bigger hits shake a little harder
+        if (shakeCam != null) shakeCam.Shake(0.16f, Mathf.Clamp(0.7f + amount * 0.3f, 0.7f, 1.6f));
     }
 
     void PlayAbility(int r, int c, int tr, int tc, AbilityType type)
@@ -149,6 +174,42 @@ public class AbilityVFX : MonoBehaviour
             float s = k < 0.6f ? Mathf.Lerp(0.1f, size, k / 0.6f)
                                : Mathf.Lerp(size, 0f, (k - 0.6f) / 0.4f);
             go.transform.localScale = Vector3.one * s;
+            yield return null;
+        }
+        Destroy(go);
+    }
+
+    // Camera-facing sprite flipbook that plays the on-hit frames once and vanishes
+    IEnumerator HitFlipbook(Vector3 pos)
+    {
+        var frames = HitFrames;
+        if (frames == null || frames.Length == 0) yield break;
+
+        var go = new GameObject("OnHitEffect");
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = frames[0];
+
+        // Normalize to a steady world size no matter the source PNG resolution
+        float target  = visual.tileSize * 2.4f; // overall size of the hit sprite
+        float camPull = 1.4f;                    // how far to float it off the piece toward the camera
+        float srcSize = Mathf.Max(frames[0].bounds.size.x, frames[0].bounds.size.y);
+        go.transform.localScale = Vector3.one * (srcSize > 0.0001f ? target / srcSize : 1f);
+        go.transform.position   = pos;
+
+        var cam = Camera.main;
+        float dur = 0.32f, t = 0f;
+        while (t < dur)
+        {
+            t += Time.deltaTime;
+            int idx = Mathf.Clamp(Mathf.FloorToInt(t / dur * frames.Length), 0, frames.Length - 1);
+            sr.sprite = frames[idx];
+            if (cam != null)
+            {
+                // Sit between the piece and the camera so nothing occludes it
+                Vector3 toCam = cam.transform.position - pos;
+                go.transform.position = pos + toCam.normalized * camPull;
+                go.transform.rotation = cam.transform.rotation; // billboard toward camera
+            }
             yield return null;
         }
         Destroy(go);

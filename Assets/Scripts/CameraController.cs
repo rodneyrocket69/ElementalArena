@@ -18,10 +18,33 @@ public class CameraController : MonoBehaviour
     public float flySpeed = 8f;
     public float flyShift = 20f;
 
+    [Header("Shake")]
+    public float shakeMagnitude = 0.22f; // world-space amplitude of a damage shake
+    public float shakeFrequency = 28f;   // how jittery the shake feels
+
     bool  freeCam;
     float currentAzimuth;
     float targetAzimuth;
     float azimuthVelocity;
+
+    // Additive damage-shake state. The offset is removed at the start of each
+    // Update before the camera repositions, so it never drifts the free cam.
+    float   shakeTime;
+    float   shakeDuration;
+    float   shakeStrength;
+    Vector3 shakeOffset;
+
+    // Kick the camera. Call whenever a piece takes damage.
+    public void Shake(float duration = 0.16f, float strength = 1f)
+    {
+        // Don't let a fresh light hit cut short a bigger ongoing shake
+        if (shakeTime <= 0f || strength >= shakeStrength)
+        {
+            shakeDuration = duration;
+            shakeStrength = strength;
+        }
+        shakeTime = Mathf.Max(shakeTime, duration);
+    }
 
     void Start()
     {
@@ -32,6 +55,10 @@ public class CameraController : MonoBehaviour
 
     void Update()
     {
+        // Undo last frame's shake so orbit/fly math works from the true position
+        transform.position -= shakeOffset;
+        shakeOffset = Vector3.zero;
+
         if (Input.GetKeyDown(KeyCode.C))
         {
             freeCam = !freeCam;
@@ -42,6 +69,24 @@ public class CameraController : MonoBehaviour
 
         if (freeCam) HandleFly();
         else         ApplyOrbit();
+
+        ApplyShake();
+    }
+
+    // Random offset that decays over the shake's lifetime, layered on top of
+    // whatever position orbit/fly just set.
+    void ApplyShake()
+    {
+        if (shakeTime <= 0f) return;
+
+        shakeTime -= Time.deltaTime;
+        float falloff = Mathf.Clamp01(shakeTime / shakeDuration);
+        float amp     = shakeMagnitude * shakeStrength * falloff;
+        float t       = Time.time * shakeFrequency;
+
+        // Two out-of-phase sine axes read as a sharp jolt rather than white noise
+        shakeOffset = new Vector3(Mathf.Sin(t) * amp, Mathf.Sin(t * 1.3f + 1.7f) * amp * 0.6f, Mathf.Cos(t * 0.9f) * amp);
+        transform.position += shakeOffset;
     }
 
     void HandleRotation()
