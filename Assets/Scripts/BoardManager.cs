@@ -57,11 +57,23 @@ public class BoardManager : MonoBehaviour
 
     // ── Queries ──────────────────────────────────────────────────────────────
 
+    // Chess movement directions. Sliders walk these until they leave the board or
+    // run into a piece; the Knight ignores everything in between.
+    static readonly (int dr, int dc)[] OrthoDirs  = { (0,1), (0,-1), (1,0), (-1,0) };
+    static readonly (int dr, int dc)[] DiagDirs   = { (1,1), (1,-1), (-1,1), (-1,-1) };
+    static readonly (int dr, int dc)[] QueenDirs  = { (0,1), (0,-1), (1,0), (-1,0),
+                                                      (1,1), (1,-1), (-1,1), (-1,-1) };
+    static readonly (int dr, int dc)[] KnightJumps = { (1,2), (2,1), (-1,2), (-2,1),
+                                                       (1,-2), (2,-1), (-1,-2), (-2,-1) };
+
     public List<(int r, int c)> GetMoves(int row, int col)
     {
         var piece = Board[row, col];
         var result = new List<(int, int)>();
         if (piece == null || piece.stunned) return result;
+
+        // One move per piece per turn — attacks and abilities are still available
+        if (piece.hasMovedThisTurn) return result;
 
         // Windborn (Zephyros): immune to rooted
         bool effectivelyRooted = piece.rooted && piece.key != "ZEPHYROS";
@@ -85,22 +97,52 @@ public class BoardManager : MonoBehaviour
         if (GameModeState.IsArena && piece.hasBall)
             effectiveMove = Mathf.Max(0, effectiveMove - ArenaConfig.CarrierMovePenalty);
 
-        for (int dr = -effectiveMove; dr <= effectiveMove; dr++)
-        for (int dc = -effectiveMove; dc <= effectiveMove; dc++)
+        if (piece.movePattern == MovePattern.Knight)
         {
-            if (dr == 0 && dc == 0) continue;
-            int nr = row + dr, nc = col + dc;
-            if (!InBounds(nr, nc) || Board[nr, nc] != null) continue;
-            if (GameModeState.IsArena)
+            // An L-jump covers 2 tiles of ground, so a piece slowed below that
+            // (Eerie Aura, carrying the ball) can't make the leap at all.
+            if (effectiveMove < 2) return result;
+            foreach (var (dr, dc) in KnightJumps)
             {
-                // Carrier can't enter outer goal tiles while the corner tower guards them
-                if (piece.hasBall && IsGoalTile(piece.player, nr, nc) && !IsGoalOpen(piece.player, nr, nc)) continue;
-                // Decoys can't sit on (or pick up) the loose ball
-                if (piece.isDecoy && BallLoose && nr == BallR && nc == BallC) continue;
+                int nr = row + dr, nc = col + dc;
+                if (!InBounds(nr, nc) || Board[nr, nc] != null) continue;
+                if (CanLandOn(piece, nr, nc)) result.Add((nr, nc));
             }
-            result.Add((nr, nc));
+            return result;
+        }
+
+        (int dr, int dc)[] dirs = piece.movePattern switch
+        {
+            MovePattern.Rook     => OrthoDirs,
+            MovePattern.Bishop   => DiagDirs,
+            MovePattern.Queen    => QueenDirs,
+            MovePattern.Immobile => null,
+            _                    => QueenDirs, // Default — treat as omnidirectional
+        };
+        if (dirs == null || effectiveMove <= 0) return result;
+
+        foreach (var (dr, dc) in dirs)
+        {
+            int nr = row + dr, nc = col + dc;
+            for (int step = 1; step <= effectiveMove; step++, nr += dr, nc += dc)
+            {
+                if (!InBounds(nr, nc)) break;
+                if (Board[nr, nc] != null) break;      // blocked — can't pass through pieces
+                if (CanLandOn(piece, nr, nc)) result.Add((nr, nc));
+            }
         }
         return result;
+    }
+
+    // Arena tile restrictions. These forbid *stopping* on a tile, not passing over it.
+    bool CanLandOn(Piece piece, int r, int c)
+    {
+        if (!GameModeState.IsArena) return true;
+        // Carrier can't enter outer goal tiles while the corner tower guards them
+        if (piece.hasBall && IsGoalTile(piece.player, r, c) && !IsGoalOpen(piece.player, r, c)) return false;
+        // Decoys can't sit on (or pick up) the loose ball
+        if (piece.isDecoy && BallLoose && r == BallR && c == BallC) return false;
+        return true;
     }
 
     public List<(int r, int c)> GetAttacks(int row, int col)
@@ -235,6 +277,18 @@ public class BoardManager : MonoBehaviour
 
     // ── Actions ──────────────────────────────────────────────────────────────
 
+    // Call when a team's turn begins: every one of its pieces gets its move back.
+    // Ability-driven displacement (Gravitic Distortion) never sets the flag, so a
+    // pulled piece can still move under its own power.
+    public void ResetTurnMovement(int player)
+    {
+        for (int r = 0; r < BS; r++) for (int c = 0; c < BS; c++)
+        {
+            var p = Board[r, c];
+            if (p != null && p.player == player) p.hasMovedThisTurn = false;
+        }
+    }
+
     public bool TryMove(int row, int col, int nr, int nc)
     {
         var piece = Board[row, col];
@@ -243,6 +297,7 @@ public class BoardManager : MonoBehaviour
 
         Board[nr, nc] = piece;
         Board[row, col] = null;
+        piece.hasMovedThisTurn = true;
 
         Log($"{N(piece)} moves {Cell(row, col)} » {Cell(nr, nc)}.");
 
@@ -820,6 +875,7 @@ public class BoardManager : MonoBehaviour
         p.rooted   = false; p.rootedTurns   = 0;
         p.fortress = false; p.fortressTurns = 0;
         p.hasBall  = false;
+        p.hasMovedThisTurn   = false;
         p.staticCharges      = p.key == "VOLTIX" ? 1 : 0;
         p.energyShieldActive = p.key == "AEGIS";
     }

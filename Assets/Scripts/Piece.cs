@@ -10,8 +10,11 @@ public class Piece
     public string pieceName;
     public string cls;
     public int maxShards;
-    public int move;
+    public int move;        // how far the piece may travel along its pattern (sliders only)
     public int dmg;
+
+    // How this piece traverses the board — chess-style lines, blocked by other pieces
+    public MovePattern movePattern;
 
     public AbilityDef ability;
 
@@ -38,6 +41,9 @@ public class Piece
     // Arena mode: true while this piece is carrying the ball
     public bool hasBall;
 
+    // One move per piece per turn — set by TryMove, cleared when its team's turn begins
+    public bool hasMovedThisTurn;
+
     public Piece Clone()
     {
         var c = (Piece)MemberwiseClone();
@@ -54,6 +60,19 @@ public struct AbilityDef
     public int range;
     public int cooldown;
     public AbilityType type;
+}
+
+// Chess-style movement. Sliders travel in straight lines and are stopped by the
+// first occupied tile; Knight leaps over anything. `Default` means "whatever
+// PieceDefinitions declares" — it exists so the tuning asset can leave a piece alone.
+public enum MovePattern
+{
+    Default = 0, // tuning-asset only: don't override the definition
+    Rook,        // 4 orthogonal lines, up to `move` tiles
+    Bishop,      // 4 diagonal lines, up to `move` tiles
+    Queen,       // all 8 lines, up to `move` tiles
+    Knight,      // L-jumps, ignores blockers, ignores `move`
+    Immobile,    // never moves (towers)
 }
 
 public enum AbilityType

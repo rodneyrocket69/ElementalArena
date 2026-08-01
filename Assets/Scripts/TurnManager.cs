@@ -59,6 +59,7 @@ public class TurnManager : MonoBehaviour
 
         SetPhase(GamePhase.AI);
         Log(string.Format(AIHeaderFmt, TurnNumber));
+        boardManager.ResetTurnMovement(2);
         aiController.BeginAITurn();
     }
 
@@ -77,6 +78,7 @@ public class TurnManager : MonoBehaviour
         AP = CombatConfig.ActionsPerTurn;
         TurnNumber++;
         OnAPChanged?.Invoke(AP);
+        boardManager.ResetTurnMovement(1);
         SetPhase(GamePhase.Player);
 
         Log(string.Format(PlayerHeaderFmt, TurnNumber));
@@ -99,6 +101,7 @@ public class TurnManager : MonoBehaviour
     public void ResetGame()
     {
         boardManager.InitBoard();
+        boardManager.ResetTurnMovement(1);
         AP = CombatConfig.ActionsPerTurn; Winner = 0; TurnNumber = 1;
         OnAPChanged?.Invoke(AP);
         SetPhase(GamePhase.Player);

@@ -100,10 +100,13 @@ public class GameParameters : ScriptableObject
         public string key;
         public string displayName;
         [Range(1, 12)] public int maxShards;   // HP
+        [Tooltip("How far a slider travels along its pattern. Knights ignore this (but can't jump while slowed below 2).")]
         [Range(0, 8)]  public int move;
         [Range(0, 6)]  public int dmg;
         [Range(0, 8)]  public int abilityRange;
         [Range(0, 8)]  public int abilityCooldown;
+        [Tooltip("Chess movement pattern. Leave on Default to use whatever PieceDefinitions declares.")]
+        public MovePattern movePattern = MovePattern.Default;
     }
 
     public CombatGroup combat = new CombatGroup();
@@ -154,25 +157,27 @@ public class GameParameters : ScriptableObject
     {
         pieces = new List<PieceParams>
         {
-            //         key          name          HP move dmg  range  cd
-            P("FLARE",     "Flare",     2, 4, 1, 2, 2),
-            P("VOLTIX",    "Voltix",    2, 2, 1, 0, 3),
-            P("ZEPHYROS",  "Zephyros",  2, 3, 1, 7, 3),
-            P("FROSTBITE", "Frostbite", 4, 2, 1, 2, 4),
-            P("BULWARK",   "Bulwark",   4, 2, 1, 0, 3),
-            P("AEGIS",     "Aegis",     4, 3, 1, 3, 3),
-            P("VERDANT",   "Verdant",   3, 2, 1, 2, 3),
-            P("MIMIC",     "Mimic",     3, 3, 1, 1, 4),
-            P("SHARDIS",   "Shardis",   3, 2, 1, 3, 5),
+            //         key          name          HP move dmg  range  cd   pattern
+            P("FLARE",     "Flare",     2, 4, 1, 2, 2, MovePattern.Bishop),
+            P("VOLTIX",    "Voltix",    2, 2, 1, 0, 3, MovePattern.Knight),
+            P("ZEPHYROS",  "Zephyros",  2, 3, 1, 7, 3, MovePattern.Queen),
+            P("FROSTBITE", "Frostbite", 4, 2, 1, 2, 4, MovePattern.Bishop),
+            P("BULWARK",   "Bulwark",   4, 2, 1, 0, 3, MovePattern.Rook),
+            P("AEGIS",     "Aegis",     4, 3, 1, 3, 3, MovePattern.Queen),
+            P("VERDANT",   "Verdant",   3, 2, 1, 2, 3, MovePattern.Rook),
+            P("MIMIC",     "Mimic",     3, 3, 1, 1, 4, MovePattern.Knight),
+            P("SHARDIS",   "Shardis",   3, 2, 1, 3, 5, MovePattern.Queen),
         };
         _lookup = null;
     }
 
-    static PieceParams P(string key, string name, int hp, int move, int dmg, int range, int cd) =>
+    static PieceParams P(string key, string name, int hp, int move, int dmg, int range, int cd,
+                         MovePattern pattern) =>
         new PieceParams
         {
             key = key, displayName = name,
             maxShards = hp, move = move, dmg = dmg,
-            abilityRange = range, abilityCooldown = cd
+            abilityRange = range, abilityCooldown = cd,
+            movePattern = pattern
         };
 }

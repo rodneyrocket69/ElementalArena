@@ -238,10 +238,32 @@ public class OverlayUI : MonoBehaviour
 
         infoText.text =
             $"<b>{piece.pieceName}</b>  [{piece.cls}]  P{piece.player}\n" +
-            $"Shards: {piece.shards} / {piece.maxShards}  |  Move: {piece.move}\n" +
+            $"Shards: {piece.shards} / {piece.maxShards}  |  Move: {MoveDesc(piece)}{MoveSpentSuffix(piece)}\n" +
             (status.Length > 0 ? status + "\n" : "") +
             (piece.isDecoy ? "" : $"\n{piece.ability.name}\n<size=10>{piece.ability.desc}</size>") +
             cd + charges + passive;
+    }
+
+    // "Bishop 4" — the chess pattern plus how far it slides. Knights don't use a distance.
+    static string MoveDesc(Piece piece)
+    {
+        return piece.movePattern switch
+        {
+            MovePattern.Rook     => $"Rook {piece.move}",
+            MovePattern.Bishop   => $"Bishop {piece.move}",
+            MovePattern.Queen    => $"Queen {piece.move}",
+            MovePattern.Knight   => "Knight (L-jump)",
+            MovePattern.Immobile => "none",
+            _                    => piece.move.ToString(),
+        };
+    }
+
+    // Only meaningful for the side that's currently acting — the other team's flags
+    // are stale until their turn comes back around.
+    string MoveSpentSuffix(Piece piece)
+    {
+        int active = turnManager.Phase == GamePhase.Player ? 1 : turnManager.Phase == GamePhase.AI ? 2 : 0;
+        return piece.player == active && piece.hasMovedThisTurn ? "  <color=#ff8a8a>(moved)</color>" : "";
     }
 
     void AppendLog(string msg)
